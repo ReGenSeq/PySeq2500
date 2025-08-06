@@ -1,0 +1,34 @@
+# Table of Regions Of Interests to image, focus, expose on flowcells
+# ROIs must be assigned to a flow cell
+# ROIs on a flow cell must have unique names
+# It is possibe to have the same ROI name on different flowcells
+
+[roi1A]
+# Table of stage parameters for a specific ROI
+flowcell = "A"                              
+# custom parameters used `BaseSequencer.custom_roi_factory` to generate stage 
+# coordinates for ROI                       
+LLx = 14
+LLy = 14
+URx = 9
+URy = 9
+
+[roi1B]
+# Table of stage parameters for a specific ROI
+flowcell = "B"
+# custom parameters used `BaseSequencer.custom_roi_factory` to generate stage 
+# coordinates for ROI 
+LLx = 16
+LLy = 16
+URx = 11
+URy = 11
+# override default parameters specified in experiment config TOML file
+stage = {nz=1}                                                                  # override number of z planes
+
+[A]
+roi2 = {LLx=13, LLy=13, URx=8, URy=8, image={optics={power={red=100}}}}.        # override red laser power during imaging
+roi3 = {LLx=17, LLy=17, URx=12, URy=12, stage = {tilt1=20000}}                  # override stage tilt motor
+
+[B]
+roi2 = {LLx=12, LLy=12, URx=7, URy=7, stage = {x_overlap=50}}                   # override x overlap, set overlap to 50 Xstage steps
+roi3 = {LLx=18, LLy=18, URx=13, URy=13, focus = {z_focus=30000}}                # override focus, set z focus position and skip focusing

@@ -1,0 +1,118 @@
+# Hardware Setting for sequencers
+# Settings for multiple sequencers or setting versions can be stored in this file
+# The settings used is specified by `name`
+# Software settings should go in default.toml
+name: Test                                                                      # name of sequencer
+Test:                                                                           # settings for a specific sequencer
+  flowcells: ['A', 'B']                                                         # list of flow cell names
+  PumpA: &pump                                                                  # &pump anchor for future reference
+    address: COM1                                                               # address identifier for communication
+    volume:                                                                     # volume parameter for pump
+      min_val: 10                                                               # minimum value of volume used for validation
+      max_val: 200                                                              # maximum value of volume used for validation
+      units: uL                                                                 # units of volume, optional
+    flow_rate:                                                                  # flow rate parameter for pump
+      min_val: 10                                                               # minimum value of flow rate used for validation
+      max_val: 1200                                                             # maximum value of flow rate used for validation
+      units: uL/min                                                             # units of volume, optional
+  PumpB:
+    <<: *pump                                                                   # reference settings using anchor from `PumpA`
+    address: COM2 
+  ValveA: &valve                                                                # &valve anchor for future reference
+    address: COM4
+    port:
+      valid_list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]                               # list of possible values for parameter, used for validation
+  ValveB:                                                                       # reference settings using anchor from `ValveA`
+    <<: *valve                                                                  
+  address: COM5
+  XStage:
+    address: COM6
+    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    origin:                                                                     # reference step for flow cells, used in `custom_roi_factory`
+      A: 100
+      B: 200
+    step: 100                                                                   # steps between tiles used in microscope routines
+    position:
+      min_val: 0
+      max_val: 50000
+      units: steps
+  YStage:
+    address: COM7
+    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    origin: 300                                                                 # reference step for flow cells, used in `custom_roi_factory`
+    step: 200                                                                   # steps between tiles used in microscope routines
+    position:
+      min_val: -7000000
+      max_val: 7000000
+      units: steps
+  TiltStage1: &tiltstage
+    address: COM8, COM9                                                         # uses 2 communication addresses, FPGA Tx and FPGA Rx
+    spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    position: &tiltposition                                                     # &tiltposition anchor for future reference
+      min_val: 0
+      max_val: 30000
+      units: steps
+  TiltStage2: *tiltstage
+  TiltStage3: *tiltstage
+  ZStage:
+    address: TiltStage                                                          # shares communication address with `TiltStage`
+    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    step: 1                                                                     # steps between z planes used in microscope z-stack routiness
+    position:
+      min_val: 0
+      max_val: 65000
+      units: steps
+  redLaser: 
+      address: COM10
+      power: &red_laser                                                         # &red_laser anchor for future reference
+        min_val: 0
+        max_val: 400
+        units: mW
+  greenLaser: 
+    address: COM11
+    power: &green_laser                                                         # &green_laser anchor for future reference
+      min_val: 0
+      max_val: 400 
+      units: mW
+  TemperatureControllerA: &fc_temp                                              # &fc_temp anchor for future reference
+    address: TiltStage
+    temperature:
+      min_val: 4
+      max_val: 60
+      units: C
+  TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
+  Shutter:
+    address: TiltStage
+  redFilterWheel: 
+    address: TiltStage
+    filter: &red_filter_wheel                                                   # &red_filter_wheel anchor for future reference
+      valid_list: {'home':0, 'open':1, '0.1':2, '1.0':3}
+  greenFilterWheel: 
+    address: TiltStage
+    filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
+      valid_list: {'home':0, 'open':1, '0.1':2, '2.0':3}
+  Camera_558_687: &camera                                                       # &camera anchor for future reference
+    exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
+      min_val: 0.1
+      max_val: 10
+      units: s
+  Camera_610_740: *camera                                                       # reference settings using anchor from `Camera_558_687`                                         
+# Extra validation parameters for stage beyond X, Y, Z 
+# Should align with stage table in default.toml
+  stage: 
+    tilt1: *tiltposition                                                        # reference settings using anchor from position of `TiltStage1`
+    tilt2: *tiltposition                                                        # reference settings using anchor from position of `TiltStage1`
+    tilt3: *tiltposition                                                        # reference settings using anchor from position of `TiltStage1`
+# Custom validation parameters for optical settings 
+# used during imaging, focusing, or exposing 
+# Should align with optics table in default.toml
+  optics:
+    power:
+      green: *green_laser                                                       # reference settings using anchor from power of `redLaser`
+      red: *red_laser                                                           # reference settings using anchor from power of `greenLaser`
+    exposure: 
+      Camera_558_687: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
+      Camera_610_740: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
+    filter: 
+      green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
+      red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`

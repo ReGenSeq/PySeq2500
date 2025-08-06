@@ -1,0 +1,42 @@
+[experiment]
+name = "TestExperiment"
+#protocol_path = None                                                           # Usually mandatory, but tests will append path from a custom test directory
+
+[reagents]
+PBS = 1
+water = 2
+formamide = 9
+imager = {port=11, flow_rate=100}
+imaging = {port=10, flow_rate=100, pause_time=10}
+
+[image]
+nz = 2
+[image.optics]
+power.red = 200
+power.green = 200
+filter.red = "open"
+filter.green = "open"
+
+[expose]
+n_exposures = 0
+[expose.optics]
+power.green = 200
+filter.green = "open"
+
+[focus]
+routine = "partial once" 
+[focus.optics]
+power.red = 25
+power.green = 25
+filter.red = "open"
+filter.green = "open"
+
+[stage]
+tilt1 = 21500  
+tilt2 = 21500  
+tilt3 = 21500                                         
+
+[pump]
+flow_rate = 500                                                                 # uL/min
+pause_time = 1                                                                  # Time to wait between aspirate and dispense in s
+waste_flow_rate = 12000                                                         # uL/min

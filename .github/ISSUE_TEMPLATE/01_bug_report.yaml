@@ -1,0 +1,59 @@
+name: Bug Report
+description: Report an error or unexpected behavior.
+labels: ["bug",]
+projects: ["krpandit/3",]
+assignees: 
+  - krpandit
+body: 
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug! 
+        We're grateful to have you involved with the PySeq ecosystem
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: |
+        A clear and concise description of what the bug is.
+
+        Try to include a minimal reproducible example and an environment or lock file if possible. 
+
+        If applicable, add screenshots to help explain your problem.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes: 
+      label: Version
+      description: What version are you using?
+      placeholder: e.g. v1.0.5-alpha
+    validations: 
+      required: false
+
+  - type: dropdown
+    id: sequencer
+    attributes: 
+      label:  Sequencer
+      description: Which sequencer are you using?
+      multiple: false
+      default: 1
+      options: 
+        - Illumina HiSeq 2000
+        - Illumina HiSeq 2500
+        - Illumina HiSeq X
+        - Illumina NovaSeq 6000
+        - Other
+    validations: 
+      required: false
+
+  - type: input
+    id: os
+    attributes: 
+      label: OS Version
+      description: What operating system is the sequencer running on?
+      placeholder: e.g. Windows 10
+    validations: 
+      required: false

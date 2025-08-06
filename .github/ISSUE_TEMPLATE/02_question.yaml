@@ -1,0 +1,50 @@
+name: Question
+description: Ask a question about PySeq
+labels: ["question",]
+projects: ["krpandit/3",]
+assignees: 
+  - krpandit
+body: 
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: |
+        Describe your question in detail.
+        If applicable, add screenshots.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes: 
+      label: Version
+      description: What version are you using?
+      placeholder: e.g. v1.0.5-alpha
+    validations: 
+      required: false
+
+  - type: dropdown
+    id: sequencer
+    attributes: 
+      label:  Sequencer
+      description: Which sequencer are you using?
+      multiple: false
+      default: 1
+      options: 
+        - Illumina HiSeq 2000
+        - Illumina HiSeq 2500
+        - Illumina HiSeq X
+        - Illumina NovaSeq 6000
+        - Other
+    validations: 
+      required: false
+
+  - type: input
+    id: os
+    attributes: 
+      label: OS Version
+      description: What operating system is the sequencer running on?
+      placeholder: e.g. Windows 10
+    validations: 
+      required: false

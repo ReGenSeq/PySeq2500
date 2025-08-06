@@ -1,0 +1,57 @@
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+    - main
+name: Build, Test, and Publish results
+jobs:
+
+  test:
+  
+    name: Test on python ${{ matrix.python-version }} and ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+        os: [windows-latest, windows-2022]
+    steps:
+    
+    - uses: actions/checkout@v4
+    
+    - name: Install the latest version of uv and set the python version
+      uses: astral-sh/setup-uv@v6
+      with: 
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Test with python ${{ matrix.python-version }} and ${{ matrix.os }}
+      run: uv run --frozen --dev pytest --cov=src --junit-xml pytest.xml
+
+    - name: Upload Test Results
+      if: (!cancelled())
+      uses: actions/upload-artifact@v4
+      with:
+        name: Test Results (Python ${{ matrix.python-version }} and ${{ matrix.os }})
+        path: pytest.xml
+    
+        
+  publish-test-results:
+    name: "Publish Tests Results"
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
+    if: (!cancelled())
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "artifacts/**/*.xml"

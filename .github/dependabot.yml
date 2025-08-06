@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    assignees: 
+    - krpandit
+    schedule:
+      interval: "weekly"
+    cooldown:
+        semver-major-days: 30
+    groups:
+    #    production-dependencies:
+    #    # dependency-type not supported by uv
+    #      dependency-type: "production"
+    #      exclude-patterns: 
+    #      - "pyseq*"
+    #    development-dependencies:
+    #   # dependency-type not supported by uv
+    #      dependency-type: "development"
+       dependencies:
+         exclude-patterns: 
+         - "pyseq*"
+       pyseq:
+         patterns:
+         - "pyseq*"
+
+        
+
+

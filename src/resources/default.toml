@@ -1,0 +1,131 @@
+# Default parameters for control software
+# Hardware parameters should be specified in machine_settings.yaml
+
+[experiment]
+name = ""                                                                       # Name of experiment
+output_path = "."                                                               # Base output directory, default=current working directory
+images_path = ""                                                                # (optional) Image directory, default = output_path/name/images
+focus_path = ""                                                                 # (optional) Focus directory, default = output_path/name/focus
+log_path = ""                                                                   # (optional) Log directory, default = output_path/name/logs
+roi_path = ""                                                                   # (optional) Path for Regions Of Interests to image TOML file 
+protocol_path = ""                                                              # Path for protocol YAML file
+
+[reagents]
+# Table of reagents
+# Reagents should have unique names and ports
+# Extra pump parameters such as flow_rate can also be specified.
+# See `pump` table for options
+#
+# reagent1 = 1
+# reagent2 = {port=2, flow_rate=100}
+# reagent3 = {port=3, flow_rate=100, **extra_kwargs}
+
+
+[image]
+# Table for imaging parameters
+nz = 0                                                                          # Number of z planes to image, overrides nz in protocols
+[image.optics]
+# Table for imaging optical parameters
+# See `optics` table for options
+
+[expose]
+# Table for exposing parameters (No image capture)
+n_exposures = 0
+[expose.optics]
+# Table for exposing optical parameters
+# See `optics` table for options
+
+[focus]
+# Table for focusing parameters 
+routine = "partial once"                                                        # Autofocus routine to use, see auto_focus_routines for all options
+[focus.optics]
+# Table for focusing optical parameters
+# See `optics` table for options
+
+
+[stage]
+# Extra sequencer specific stage parameters for ROIs beyond X, Y, Z positions
+# For example HiSeqs have 3 tilt motors
+# Can also specify initial values for ROI stage parameter that are determined
+# during experiment runs, for example an initial z position that is changed after
+# focusing on the ROI to find the optimal z position for imaging. 
+# 
+# tilt1 = 21500  
+# tilt2 = 21500  
+# tilt3 = 21500
+# z_init = 30000  
+
+
+[optics]
+# Sequencer specific optical parameters for imaging, exposing, or focusing
+# For example laser power, excitation filters, camera exposure
+#
+# power.red = 0
+# power.green = 0                                                  
+# filter.red = "home"
+# filter.green = "home"
+# exposure.Camera_558_687 = 1
+# exposure.Camera_610_740 = 1                                           
+
+[pump]
+# Sequencer specific pump parameters such a flow rate
+# flow_rate = 0                                                                   # uL/min
+# pause_time = 1                                                                  # Time to wait between aspirate and dispense in s
+# waste_flow_rate = 12000                                                         # uL/min
+
+[logging]
+# Table for log settings
+version = 1
+disable_existing_loggers = true
+
+[logging.formatters.brief]
+# Log format to inform users during experiments
+format = "%(asctime)s | %(levelname)s - %(message)s"                            
+datefmt = "%m-%d %H:%M"
+
+[logging.formatters.long]
+# Log format to write to files
+format = "%(asctime)s | %(name)s - %(levelname)s - %(message)s"
+datefmt = "%Y%m%d %H:%M:%Ss"
+
+[logging.handlers.consoleHandler]
+# Log settings to inform users
+class = "logging.StreamHandler"
+level = "INFO"
+formatter = "brief"
+stream = "ext://sys.stdout"
+
+[logging.handlers.rotatingHandler]
+# Log settings when sequencer not used for experiments
+# Creates a new log file everyday and saves up to 10 logs. 
+class = "logging.handlers.TimedRotatingFileHandler"
+level = "DEBUG"
+formatter = "long"
+filename = "~/.config/pyseq/logs/pyseq.log"
+when = "midnight"
+backupCount = 10
+
+[logging.handlers.fileHandler]
+# Log settings when sequencer used for experiments
+class = "logging.FileHandler"
+level = "DEBUG"
+formatter = "long"
+filename = ""
+
+[logging.loggers.PySeq]
+# Logger for control software, handlers are added at runtime
+level = "DEBUG"
+handlers = []
+propagate = false
+
+[logging.root]
+level = "WARNING"
+handlers = ["consoleHandler"]
+
+[auto_focus_routines]
+# Valid autofocus routines
+routines = ["full", "full_once", "partial", "partial once"]
+
+[rotate_logs]
+# Flag to add rotatingHandler to logger
+rotate_logs = false                                                             # flag to rotate logs during testing or idleing

@@ -1,0 +1,51 @@
+name: Feature Request
+description: Suggest an idea for PySeq
+labels: ["enhancement",]
+projects: ["krpandit/3",]
+assignees: 
+  - krpandit
+body: 
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: |
+        A clear and concise description of the relevant request.
+        
+        If applicable, describe the current behavior or add screenshots to help explain the request.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes: 
+      label: Version
+      description: What version are you using?
+      placeholder: e.g. v1.0.5-alpha
+    validations: 
+      required: false
+
+  - type: dropdown
+    id: sequencer
+    attributes: 
+      label:  Sequencer
+      description: Which sequencer are you using?
+      multiple: false
+      default: 1
+      options: 
+        - Illumina HiSeq 2000
+        - Illumina HiSeq 2500
+        - Illumina HiSeq X
+        - Illumina NovaSeq 6000
+        - Other
+    validations: 
+      required: true
+
+  - type: input
+    id: os
+    attributes: 
+      label: OS Version
+      description: What operating system is the sequencer running on?
+      placeholder: e.g. Windows 10
+    validations: 
+      required: false
