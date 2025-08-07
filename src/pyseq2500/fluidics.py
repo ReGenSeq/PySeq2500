@@ -33,9 +33,10 @@ class Pump(BasePump):
     async def initialize(self):
         """Initializes the pump hardware.
 
-        This method perfrom any necessary hardware configurations.
+        This method perform any necessary hardware configurations.
         """
-        pass
+        await self.command("W4R")
+        await self.configure()
 
     async def shutdown(self):
         """Shuts down the valve hardware.
@@ -43,7 +44,8 @@ class Pump(BasePump):
         This method should gracefully disconnect from the pump, release
         any resources, and put the pump into a safe, parked, or off state.
         """
-        pass
+        await self.command("A0V7000OR")  # push all fluid out to waste
+        await self.command("A0IR")  # move valve to default state
 
     async def status(self) -> bool:
         """Retrieves the current operational status of the valve.

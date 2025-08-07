@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 
 [[package]]
@@ -275,8 +275,24 @@ wheels = [
 ]
 
 [[package]]
-name = "pyseq"
+name = "pyseq-core"
 version = "1.1.0a0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "pydantic" },
+    { name = "pyserial" },
+    { name = "pyyaml" },
+    { name = "tomlkit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/6d/0060bc991e5161e4b52f27a152b78d0e3d676a5d00812aec8313044818b7/pyseq_core-1.1.0a0.tar.gz", hash = "sha256:d2b54f3b5a38f359b7df86e5283cf630a50637771da2b515b19d3b4d71f058b3", size = 31758, upload-time = "2025-08-06T16:22:13.375Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/53/7ee58ba49a4add878a3b6a0b1fd7a9732edb659808c6cb13f039be899e4e/pyseq_core-1.1.0a0-py3-none-any.whl", hash = "sha256:da605ef6ead06a17c6ca4eee32a8f385fd79d350f1cc9c494615e178e1ef4d80", size = 37003, upload-time = "2025-08-06T16:22:12.358Z" },
+]
+
+[[package]]
+name = "pyseq2500"
+version = "0.0.0a0"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },
@@ -313,22 +329,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.2.1" },
     { name = "ruff", specifier = ">=0.12.4" },
     { name = "ty", specifier = ">=0.0.1a15" },
-]
-
-[[package]]
-name = "pyseq-core"
-version = "1.1.0a0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-    { name = "pydantic" },
-    { name = "pyserial" },
-    { name = "pyyaml" },
-    { name = "tomlkit" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/6d/0060bc991e5161e4b52f27a152b78d0e3d676a5d00812aec8313044818b7/pyseq_core-1.1.0a0.tar.gz", hash = "sha256:d2b54f3b5a38f359b7df86e5283cf630a50637771da2b515b19d3b4d71f058b3", size = 31758, upload-time = "2025-08-06T16:22:13.375Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/53/7ee58ba49a4add878a3b6a0b1fd7a9732edb659808c6cb13f039be899e4e/pyseq_core-1.1.0a0-py3-none-any.whl", hash = "sha256:da605ef6ead06a17c6ca4eee32a8f385fd79d350f1cc9c494615e178e1ef4d80", size = 37003, upload-time = "2025-08-06T16:22:12.358Z" },
 ]
 
 [[package]]

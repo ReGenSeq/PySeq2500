@@ -3,12 +3,12 @@ requires = ["uv_build>=0.8.5,<0.9.0"]
 build-backend = "uv_build"
 
 [project]
-name = "pyseq"  # UPDATE to sequencer-alias
-version = "v1.1.0-alpha" # Start at "v0.0.0-alpha"
+name = "pyseq2500"  
+version = "v0.0.0-alpha" 
 authors = [
-  { name="Kunal Pandit", email="kpandit8387@gmail.com" }, # UPDATE
+  { name="Kunal Pandit", email="kpandit8387@gmail.com" }, 
 ]
-description = "Open source control sofware for [sequencer make & model]" #UPDATE
+description = "Open source control sofware for Illumina HiSeq 2500"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -35,7 +35,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/PySeqEcosystem"
-Issues = "https://github.com/PySeqEcosystem/{sequencer-alias}" # UPDATE
+Issues = "https://github.com/PySeqEcosystem/pyseq2500"
 
 
 [tool.pytest.ini_options]
@@ -48,4 +48,3 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli_level = "DEBUG"
 asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
-

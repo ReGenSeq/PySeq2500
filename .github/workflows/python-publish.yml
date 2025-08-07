@@ -49,7 +49,7 @@ jobs:
     environment:
       name: pypi
       # UPDATE
-      url: https://pypi.org/project/pyseq_core/${{ github.event.release.name }}
+      url: https://pypi.org/project/pyseq2500/${{ github.event.release.name }}
 
     steps:
       - name: Retrieve release distributions
