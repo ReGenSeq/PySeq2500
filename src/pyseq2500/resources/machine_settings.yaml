@@ -4,7 +4,7 @@
 # Software settings should go in default.toml
 name: Test                                                                      # name of sequencer
 Test:                                                                           # settings for a specific sequencer
-  flowcells: ['A', 'B']                                                         # list of flow cell names
+  flowcells: ['A', 'B']                                                         # list of flow cell names 
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600
@@ -47,15 +47,15 @@ Test:                                                                           
       <<: *valvecom
       address: VICI10A
     port:
-      valid_list: [4,5]                                                         # list of possible values for parameter, used for validation
-    safe_port: 4
+      valid_list: [2,3]                                                         # list of possible values for parameter, used for validation
+    safe_port: 2
   Valve10B:                                                                     # reference settings using anchor from `ValveA` 
     com:
       <<: *valvecom 
       address: VICI10B                                                            
     port:
-      valid_list: [6,7]                                                         # list of possible values for parameter, used for validation
-    safe_port: 6
+      valid_list: [4,5]                                                         # list of possible values for parameter, used for validation
+    safe_port: 4
   XStage:
     address: COM6
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`

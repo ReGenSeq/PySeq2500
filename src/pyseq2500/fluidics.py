@@ -84,7 +84,9 @@ class Pump(BasePump):
 
     async def initialize(self):
         """Initializes the pump and configures volume and flow rate limits."""
-        await self.command("W4R")
+        await self.command("W4R")  # initialize/reset
+        await self.command("&")  # firmware version
+        await self.command("#")  # checksum
         await self.wait_for_ready()
 
     async def shutdown(self):
@@ -94,6 +96,7 @@ class Pump(BasePump):
         await self.command("A0V7000OR")  # push all fluid out to waste
         await self.wait_for_ready()
         await self.command("A0IR")  # move valve to default state
+        await self.wait_for_ready()
 
     async def status(self) -> bool:
         """Query pump for status and position.
@@ -213,7 +216,6 @@ class Pump(BasePump):
         while self.position != pos:
             await self.command(f"IA{pos}V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
         # Allow pressure to equalize
         await asyncio.sleep(pause_time)
@@ -226,7 +228,6 @@ class Pump(BasePump):
         while self.position != 0:
             await self.command(f"OA0V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
         # Move valve to idle input position
         await self.command("IR")
@@ -440,8 +441,8 @@ class Valve(BaseValve):
     async def status(self) -> bool:
         return self._status
 
-    async def configure(self):
-        """No configuration need for valve."""
+    async def configure(self, exp_config: dict = None):
+        """No configuration needed for valve."""
         pass
 
     async def select(self, port: Union[str, int], timeout=30) -> bool:

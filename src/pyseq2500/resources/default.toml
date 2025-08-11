@@ -50,28 +50,32 @@ routine = "partial once"                                                        
 # during experiment runs, for example an initial z position that is changed after
 # focusing on the ROI to find the optimal z position for imaging. 
 # 
-# tilt1 = 21500  
-# tilt2 = 21500  
-# tilt3 = 21500
-# z_init = 30000  
+tilt1 = 21500  
+tilt2 = 21500  
+tilt3 = 21500
+z_init = 30000  
 
 
 [optics]
 # Sequencer specific optical parameters for imaging, exposing, or focusing
 # For example laser power, excitation filters, camera exposure
 #
-# power.red = 0
-# power.green = 0                                                  
-# filter.red = "home"
-# filter.green = "home"
-# exposure.Camera_558_687 = 1
-# exposure.Camera_610_740 = 1                                           
+power.red = 0
+power.green = 0                                                  
+filter.red = "home"
+filter.green = "home"
+exposure.Camera_558_687 = 1
+exposure.Camera_610_740 = 1                                           
 
 [pump]
 # Sequencer specific pump parameters such a flow rate
-# flow_rate = 0                                                                   # uL/min
-# pause_time = 1                                                                  # Time to wait between aspirate and dispense in s
-# waste_flow_rate = 12000                                                         # uL/min
+flow_rate = 0                                                                   # uL/min
+pause_time = 1                                                                  # Time to wait between aspirate and dispense in s
+waste_flow_rate = 12000                                                         # uL/min
+
+
+[flowcell]
+inlet = 2                                                                       # Use 2 or 8 port inlet
 
 [logging]
 # Table for log settings
@@ -129,6 +133,3 @@ routines = ["full", "full_once", "partial", "partial once"]
 [rotate_logs]
 # Flag to add rotatingHandler to logger
 rotate_logs = false                                                             # flag to rotate logs during testing or idleing
-
-[PumpA]
-barrels_per_lane = 1

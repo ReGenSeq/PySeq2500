@@ -65,10 +65,7 @@ if not DEFAULT_CONFIG_PATH.exists():
     shutil.copy(DEFAULT_CONFIG_RESOURCE, DEFAULT_CONFIG_PATH)
 
 # Default settings for experiment/software
-machine_name = machine_name.lower()
-if os.environ.get("PYTEST_VERSION") is not None and (
-    "test" in machine_name or "virtual" in machine_name
-):
+if os.environ.get("PYTEST_VERSION") is not None and "test" in machine_name.lower():
     # use default experiment config and machine settings from package resources
     LOGGER.info("Using package default.toml")
     DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_RESOURCE
@@ -81,6 +78,11 @@ if os.environ.get("PYTEST_VERSION") is not None and (
 
 # Read default config and machine settings
 DEFAULT_CONFIG = tomlkit.parse(open(DEFAULT_CONFIG_PATH).read())
+for fc in HW_CONFIG["flowcells"]:
+    # Copy barrels_per_lane from HW_CONFIG to DEFAUL_CONFIG to configure pumpes
+    p = f"Pump{fc}"
+    DEFAULT_CONFIG[p] = {"barrels_per_lane": HW_CONFIG[p]["barrels_per_lane"]}
+
 """Dictionary containing the default experiment and software configuration.
 
 This is loaded from the `DEFAULT_CONFIG_PATH` TOML file.
