@@ -129,3 +129,6 @@ routines = ["full", "full_once", "partial", "partial once"]
 [rotate_logs]
 # Flag to add rotatingHandler to logger
 rotate_logs = false                                                             # flag to rotate logs during testing or idleing
+
+[PumpA]
+barrels_per_lane = 1

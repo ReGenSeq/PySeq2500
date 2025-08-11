@@ -6,25 +6,56 @@ name: Test                                                                      
 Test:                                                                           # settings for a specific sequencer
   flowcells: ['A', 'B']                                                         # list of flow cell names
   PumpA: &pump                                                                  # &pump anchor for future reference
-    address: COM1                                                               # address identifier for communication
+    com: &pumpcom
+      baudrate: 9600
+      timeout: 1
+      address: KLOEHNAA                                                             # address identifier for communication
+      prefix: /
+      suffix: /r
     volume:                                                                     # volume parameter for pump
-      min_val: 10                                                               # minimum value of volume used for validation
-      max_val: 200                                                              # maximum value of volume used for validation
       units: uL                                                                 # units of volume, optional
     flow_rate:                                                                  # flow rate parameter for pump
-      min_val: 10                                                               # minimum value of flow rate used for validation
-      max_val: 1200                                                             # maximum value of flow rate used for validation
       units: uL/min                                                             # units of volume, optional
+    steps: 48000
+    barrel_volume: 250                                                          # uL
+    barrels_per_lane: 8
+    max_sps: 8000                                                               # max steps per second
+    min_sps: 40                                                                 # min steps per second
+
   PumpB:
     <<: *pump                                                                   # reference settings using anchor from `PumpA`
-    address: COM2 
-  ValveA: &valve                                                                # &valve anchor for future reference
-    address: COM4
+    com:
+      <<: *pumpcom
+      address: KLOEHNBA
+  Valve24A: &valve24                                                              # &valve anchor for future reference
+    com: &valvecom
+      baudrate: 9600
+      timeout: 1
+      address: VICI24A                                                          # address identifier for communication
+      prefix: ""
+      suffix: \r
     port:
-      valid_list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]                               # list of possible values for parameter, used for validation
-  ValveB:                                                                       # reference settings using anchor from `ValveA`
-    <<: *valve                                                                  
-  address: COM5
+      valid_list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] # list of possible values for parameter, used for validation
+    safe_port: 20
+  Valve24B:                                                                     # reference settings using anchor from `ValveA`
+    <<: *valve24    
+    com:
+      <<: *valvecom                                                             
+      address: VICI24B
+  Valve10A:                                                                     # &valve anchor for future reference
+    com: 
+      <<: *valvecom
+      address: VICI10A
+    port:
+      valid_list: [4,5]                                                         # list of possible values for parameter, used for validation
+    safe_port: 4
+  Valve10B:                                                                     # reference settings using anchor from `ValveA` 
+    com:
+      <<: *valvecom 
+      address: VICI10B                                                            
+    port:
+      valid_list: [6,7]                                                         # list of possible values for parameter, used for validation
+    safe_port: 6
   XStage:
     address: COM6
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`

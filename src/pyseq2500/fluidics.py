@@ -1,10 +1,41 @@
 from pyseq_core.base_instruments import BasePump, BaseValve
+from pyseq_core.utils import parse
 from typing import Union
 import logging
+from pyseq2500.com import EmulatedSerialCOM
+from attrs import define, field
+import re
+import asyncio
+from functools import cached_property
+from warnings import warn
+
 
 LOGGER = logging.getLogger("PySeq")
 
+# /1`0 or /0?100
+# /1 or /0 indicates pump id
+# ` indicates pump ready, ? indicates pump busy
+# 0 or 100 indicates pump step position
+PUMP_STATUS = re.compile(r"(\d+)(`|\@)(\d+)")
 
+
+def pump_status_converter(ready: str) -> bool:
+    if ready == "`":
+        return True
+    elif ready == "@":
+        return False
+    else:
+        raise ValueError(f"Invalid ready code: {ready}")
+
+
+@define
+class PumpStatus:
+    id: int = field()
+    ready: bool = field(converter=pump_status_converter)
+    position: int = field(converter=int)
+
+
+@define(kw_only=True)
 class Pump(BasePump):
     """Concrete implementation of a pump instrument.
 
@@ -30,45 +61,135 @@ class Pump(BasePump):
             to the pump.
     """
 
-    async def initialize(self):
-        """Initializes the pump hardware.
+    _interval: int = field(default=1)
+    _ready: bool = field(init=False)
+    _position: int = field(init=False)
+    barrels_per_lane = field(init=False)
 
-        This method perform any necessary hardware configurations.
-        """
+    @cached_property
+    def barrel_volume(self):
+        return self.config["barrel_volume"]
+
+    @cached_property
+    def steps(self):
+        return self.config["steps"]
+
+    @cached_property
+    def min_sps(self):
+        return self.config["min_sps"]
+
+    @cached_property
+    def max_sps(self):
+        return self.config["max_sps"]
+
+    async def initialize(self):
+        """Initializes the pump and configures volume and flow rate limits."""
         await self.command("W4R")
-        await self.configure()
+        await self.wait_for_ready()
 
     async def shutdown(self):
-        """Shuts down the valve hardware.
+        """Return pump to idle ready state."""
 
-        This method should gracefully disconnect from the pump, release
-        any resources, and put the pump into a safe, parked, or off state.
-        """
+        await self.wait_for_ready()
         await self.command("A0V7000OR")  # push all fluid out to waste
+        await self.wait_for_ready()
         await self.command("A0IR")  # move valve to default state
 
     async def status(self) -> bool:
-        """Retrieves the current operational status of the valve.
-
-        This method queries the pump hardware to determine if it is
-        connected, responsive, and in a ready state.
+        """Query pump for status and position.
 
         Returns:
-            bool: True if the valve is operational, False otherwise.
+            bool: True if the pump is ready, False otherwise.
         """
-        pass
+        response = await self.command("?")
+        response = parse(PUMP_STATUS, response, PumpStatus)
 
-    async def configure(self):
+        self.ready = response.ready
+        self.position = response.position
+
+        return self.ready
+
+    async def wait_for_ready(self, delay: int = 0):
+        """Query and wait for pump to be in ready state.
+
+        Use the delay argument to avoid unneccesarily querying the pump,
+        especially after moving the piston.
+
+        Args:
+            delay (Union[int, float]): The target position to move the stage to.
+
+        """
+        if delay > 0:
+            await asyncio.sleep(delay)
+        while not await self.status():
+            await asyncio.sleep(self._interval)
+
+    async def configure(self, exp_config: dict = None, barrels_per_lane: int = None):
         """Configures the pump based on its loaded settings.
 
         This method applies specific configuration parameters from `self.config`
         to the physical pump hardware. This might include setting operating modes,
         calibration values, or other device-specific settings.
         """
-        pass
+
+        if exp_config is not None:
+            self.barrels_per_lane = exp_config[self.name]["barrels_per_lane"]
+        elif barrels_per_lane is not None:
+            self.barrels_per_lane = barrels_per_lane
+        else:
+            self.barrels_per_lane = self.config["barrels_per_lane"]
+            warn(
+                f"{self.name} using default hardware barrels_per_lane = {self.barrels_per_lane}."
+            )
+
+        self.max_volume = self.barrel_volume * self.barrels_per_lane
+        self.min_volume = self.max_volume / self.steps
+        self.max_flow_rate = int(self.max_sps * self.min_volume * 60)
+        self.min_flow_rate = int(self.min_sps * self.min_volume * 60)
+
+        # Update hardware settings
+        self.config["volume"]["min_val"] = self.min_volume
+        self.config["volume"]["max_val"] = self.max_volume
+        self.config["flow_rate"]["min_val"] = self.min_flow_rate
+        self.config["flow_rate"]["max_val"] = self.max_flow_rate
+
+        units = self.config["volume"]["units"]
+        LOGGER.debug(f"{self.name}: min volume = {self.min_volume} {units}")
+        LOGGER.debug(f"{self.name}: max volume = {self.max_volume} {units}")
+        units = self.config["flow_rate"]["units"]
+        LOGGER.debug(f"{self.name}: min flow rate = {self.min_flow_rate} {units}")
+        LOGGER.debug(f"{self.name}: max flow rate = {self.max_flow_rate} {units}")
+
+    def vol_to_step(self, volume: int) -> int:
+        units = self.config["volume"]["units"]
+        if volume > self.max_volume:
+            warn(f"{volume} > max volume, only pumping {self.max_volume} {units}")
+            return self.max_volume
+        if volume < self.min_volume:
+            warn(f"{volume} < min volume, pumping {self.min_volume} {units}")
+            return self.min_volume
+        else:
+            return int(round(volume / self.max_volume * self.steps))
+
+    def flow_to_sps(self, flow: int) -> int:
+        units = self.config["flow_rate"]["units"]
+        if flow > self.max_flow_rate:
+            warn(
+                f"{flow} > max flow rate, only pumping at {self.max_flow_rate} {units}"
+            )
+            flow = self.max_flow_rate
+        if flow < self.min_flow_rate:
+            warn(f"{flow} < min min rate, pumping at {self.min_flow_rate} {units}")
+            flow = self.min_flow_rate
+        else:
+            return int(round(flow / 60 * self.steps / self.max_volume))
 
     async def pump(
-        self, volume: Union[float, int], flow_rate: Union[float, int], **kwargs
+        self,
+        volume: Union[float, int],
+        flow_rate: Union[float, int],
+        pause_time: int = 1,
+        waste_flow_rate=None,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
 
@@ -83,10 +204,40 @@ class Pump(BasePump):
         Returns:
             bool: True if succesfully pumped volume, otherwise False.
         """
-        pass
+        await self.wait_for_ready()
+
+        # Aspirate from flowcell
+        pos = self.vol_to_step(volume)
+        sps = self.flow_to_sps(flow_rate)
+        delay = volume / flow_rate * 60 - 2
+        while self.position != pos:
+            await self.command(f"IA{pos}V{sps}R")
+            await self.wait_for_ready(delay=delay)
+            delay = 0
+
+        # Allow pressure to equalize
+        await asyncio.sleep(pause_time)
+
+        # Dispense to waste
+        if waste_flow_rate is None:
+            waste_flow_rate = 0.8 * self.max_flow_rate
+        delay = volume / waste_flow_rate * 60 - 2
+        sps = self.flow_to_sps(waste_flow_rate)
+        while self.position != 0:
+            await self.command(f"OA0V{sps}R")
+            await self.wait_for_ready(delay=delay)
+            delay = 0
+
+        # Move valve to idle input position
+        await self.command("IR")
+        await self.wait_for_ready()
 
     async def reverse_pump(
-        self, volume: Union[float, int], flow_rate: Union[float, int], **kwargs
+        self,
+        volume: Union[float, int],
+        flow_rate: Union[float, int],
+        pause_time: int = 1,
+        waste_flow_rate=None,
     ):
         """Pump a specified volume at a specified flow rate from outlet to inlet of flowcell.
 
@@ -101,10 +252,133 @@ class Pump(BasePump):
         Returns:
             bool: True if succesfully pumped volume, otherwise False.
         """
-        pass
+
+        await self.wait_for_ready()
+
+        # Aspirate from waste
+        if waste_flow_rate is None:
+            waste_flow_rate = self.max_flow_rate * 0.5
+        pos = self.vol_to_step(volume)
+        sps = self.flow_to_sps(waste_flow_rate)
+        delay = volume / waste_flow_rate * 60 - 2
+        while self.position != pos:
+            await self.command(f"OA{pos}V{sps}R")
+            await self.wait_for_ready(delay=delay)
+            delay = 0
+
+        # Allow pressure to equalize
+        await asyncio.sleep(pause_time)
+
+        # Dispense to flow cell
+        delay = volume / flow_rate * 60 - 2
+        sps = self.flow_to_sps(flow_rate)
+        while self.position != 0:
+            await self.command(f"IA0V{sps}R")
+            await self.wait_for_ready(delay=delay)
+            delay = 0
+
+    @property
+    def ready(self):
+        return self._ready
+
+    @ready.setter
+    def ready(self, status):
+        self._ready = status
+
+    @property
+    def position(self):
+        return self._position
+
+    @position.setter
+    def position(self, status):
+        self._position = status
 
 
+@define(kw_only=True)
+class EmulatedPump(EmulatedSerialCOM):
+    id: int = field(default=1)
+    valve: str = field(default="I")
+    position: int = field(default=0)
+    ready: str = field(default="`")
+    move_pattern: re.Pattern = field(default=re.compile(r"(I|O)A(\d+)"))
+    valve_pattern: re.Pattern = field(default=re.compile(r"(I|O)"))
+    query_pattern: re.Pattern = field(default=re.compile(r"\?"))
+    init_pattern: re.Pattern = field(default=re.compile(r"W4R"))
+    counter: int = field(default=0)
+    counter_thresh: int = field(default=2)
+
+    async def command(self, command: str) -> str:
+        """
+        Asynchronously emulate sending commands and receiving response from pump.
+
+        Args:
+            command (str): The command string to be sent.
+        """
+        cmdid = self.bump_cmdid()
+        command = f"{self.prefix}{command}{self.suffix}"
+        async with self.lock:
+            LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
+
+            move_match = re.search(self.move_pattern, command)
+            valve_match = re.search(self.valve_pattern, command)
+            query_match = re.search(self.query_pattern, command)
+            init_match = re.search(self.init_pattern, command)
+
+            if move_match:
+                response = self.move(*move_match.groups())
+            elif valve_match:
+                response = self.valve_move(*valve_match.groups())
+            elif query_match:
+                response = self.query()
+            elif init_match:
+                response = self.init()
+            else:
+                LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
+                response = ""
+            response = f"{self.prefix}{self.id}{response}{self.suffix}"
+            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+            return response
+
+    def move(self, valve, position):
+        self.valve = valve
+        self.position = position
+        self.ready = "@"
+        self.counter = 0
+        self.counter_thresh = 2
+        return f"{self.ready}"
+
+    def valve_move(self, valve):
+        self.valve = valve
+        self.ready = "@"
+        self.counter = 0
+        self.counter_thresh = 0
+        return f"{self.ready}"
+
+    def query(self):
+        self.counter += 1
+        if self.counter > self.counter_thresh:
+            self.ready = "`"
+            self.counter = 0
+        return f"{self.ready}{self.position}"
+
+    def init(self):
+        self.ready = "@"
+        self.position = "0"
+        self.counter = 0
+        self.counter_thresh = 1
+        return f"{self.ready}"
+
+
+VALVE_ID = re.compile(r"ID\s+=\s+([\w|\s]+)")
+VALVE_NP = re.compile(r"NP\s+=\s+(\d+)")
+VALVE_CP = re.compile(r"Position\s+is\s+=\s+(\d+)")
+
+
+@define(kw_only=True)
 class Valve(BaseValve):
+    _port: int = field(init=False, converter=int)
+    n_ports: int = field(init=False, converter=int)
+    _status: bool = field(init=False)
     """Concrete implementation of a valve instrument.
 
     This class provides a specific implementation for the abstract methods
@@ -138,37 +412,39 @@ class Valve(BaseValve):
         This method performs any necessary hardware configurations and sets the
         Valve to the initial_port position.
         """
-        pass
+
+        # Record valve firmware
+        await self.command("VR")
+
+        # Get valve id and update prefix if needed
+        response = await self.command("ID")
+        match = re.search(VALVE_ID, response)
+        if match:
+            ID = match.groups()[0]
+            if ID != "not used":
+                self.com.prefix = ID
+
+        # Get number of ports on valve
+        response = await self.command("NP")
+        match = re.search(VALVE_NP, response)
+        if match:
+            self.n_ports = match.groups()[0]
+
+        # Update current port
+        await self.current_port()
 
     async def shutdown(self):
-        """Shuts down the valve hardware.
-
-        This method should gracefully disconnect from the valve, release
-        any resources, and put the valve into a safe state.
-        """
-        pass
+        """Put the valve in safe port state."""
+        await self.command(f"GO{self.config['safe_port']}")
 
     async def status(self) -> bool:
-        """Retrieves the current operational status of the valve.
-
-        This method queries the valve hardware to determine if it is
-        connected, responsive, and in a ready state.
-
-        Returns:
-            bool: True if the valve is operational, False otherwise.
-        """
-        pass
+        return self._status
 
     async def configure(self):
-        """Configures the valve based on its loaded settings.
-
-        This method applies specific configuration parameters from `self.config`
-        to the physical valve hardware. This might include setting operating modes,
-        calibration values, or other device-specific settings.
-        """
+        """No configuration need for valve."""
         pass
 
-    async def select(self, port: Union[str, int], **kwargs) -> bool:
+    async def select(self, port: Union[str, int], timeout=30) -> bool:
         """Select a specific port on the valve.
 
         This method should be implemented by subclasses to send commands to the
@@ -181,7 +457,14 @@ class Valve(BaseValve):
         Returns:
             bool: True if successfully selected port, otherwise False.
         """
-        pass
+
+        async with asyncio.timeout(timeout):
+            while self.port != port:
+                await self.command(f"GO{port}")
+                position = await self.current_port()
+                if position != port:
+                    self._status = False
+        self._status = True
 
     async def current_port(self) -> Union[str, int]:
         """Read the current active port from the valve.
@@ -192,3 +475,75 @@ class Valve(BaseValve):
         Returns:
             Union[str, int]: The identifier of the current active port.
         """
+        response = await self.command("CP")
+        match = re.search(VALVE_CP, response)
+        if match:
+            self.port = match.groups()[0]
+            self._status = True
+            return self.port
+        else:
+            self._status = False
+
+
+@define(kw_only=True)
+class EmulatedValve(EmulatedSerialCOM):
+    _id: int = field(default=1)
+    n_ports: int = field(init=False)
+    position: int = field(default=1)
+    go_pattern: re.Pattern = field(default=re.compile(r"GO(\d+)"))
+    cp_pattern: re.Pattern = field(default=re.compile(r"CP"))
+    id_pattern: re.Pattern = field(default=re.compile(r"ID"))
+    np_pattern: re.Pattern = field(default=re.compile(r"NP"))
+
+    @n_ports.default
+    def get_n_ports(self):
+        match = re.search(re.compile(r"VALVE(\d+)"), self.name)
+        if match:
+            return int(match.groups()[0])
+        else:
+            return 24
+
+    async def command(self, command: str) -> str:
+        """
+        Asynchronously emulate sending commands and receiving response from pump.
+
+        Args:
+            command (str): The command string to be sent.
+        """
+        cmdid = self.bump_cmdid()
+        command = f"{self.prefix}{command}{self.suffix}"
+        async with self.lock:
+            LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
+
+            go_match = re.search(self.go_pattern, command)
+            cp_match = re.search(self.cp_pattern, command)
+            id_match = re.search(self.id_pattern, command)
+            np_match = re.search(self.np_pattern, command)
+
+            if go_match:
+                response = self.go(*go_match.groups())
+            elif cp_match:
+                response = self.cp()
+            elif id_match:
+                response = self.id()
+            elif np_match:
+                response = self.np()
+            else:
+                LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
+                response = ""
+            response = f"{self.prefix}{response}{self.suffix}"
+            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+            return response
+
+    def go(self, position) -> str:
+        self.position = int(position)
+        return ""
+
+    def cp(self) -> str:
+        return f"Position is  = {self.position}"
+
+    def id(self) -> str:
+        return f"ID = {self._id}"
+
+    def np(self) -> str:
+        return f"NP = {self.n_ports}"
