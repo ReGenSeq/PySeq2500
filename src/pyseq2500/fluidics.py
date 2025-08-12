@@ -61,7 +61,7 @@ class Pump(BasePump):
             to the pump.
     """
 
-    _interval: int = field(default=1)
+    _interval: Union[int, float] = field(default=1)
     _ready: bool = field(init=False)
     _position: int = field(init=False)
     barrels_per_lane = field(init=False)
@@ -191,8 +191,8 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: int = 1,
-        waste_flow_rate=None,
+        pause_time: Union[float, int],
+        waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
 
@@ -200,8 +200,10 @@ class Pump(BasePump):
         pump to dispense a given volume of liquid at a particular flow rate.
 
         Args:
-            volume (Union[float, int]): The volume of liquid to pump.
-            flow_rate (Union[float, int]): The rate at which to pump the liquid.
+            volume (Union[float, int]): The volume (uL) of liquid to pump.
+            flow_rate (Union[float, int]): The rate (uL/min) at which to pull in from the flow cell.
+            pause_time (Union[float, int]): Time (s) to wait between aspirating and dispensing
+            waste_flow_rate (Union[float, int]): The rate (uL/min) at which to push out to waste.
             **kwargs: Additional keyword arguments that might be specific to
                       a particular pump implementation (e.g., pause_time, waste_flow_rate).
         Returns:
@@ -279,7 +281,7 @@ class Pump(BasePump):
             delay = 0
 
     @property
-    def ready(self):
+    def ready(self) -> bool:
         return self._ready
 
     @ready.setter
@@ -287,7 +289,7 @@ class Pump(BasePump):
         self._ready = status
 
     @property
-    def position(self):
+    def position(self) -> int:
         return self._position
 
     @position.setter
@@ -341,6 +343,7 @@ class EmulatedPump(EmulatedSerialCOM):
             return response
 
     def move(self, valve, position):
+        """Move syringe piston and valve."""
         self.valve = valve
         self.position = position
         self.ready = "@"
@@ -349,6 +352,7 @@ class EmulatedPump(EmulatedSerialCOM):
         return f"{self.ready}"
 
     def valve_move(self, valve):
+        """Move only valve."""
         self.valve = valve
         self.ready = "@"
         self.counter = 0
@@ -356,6 +360,7 @@ class EmulatedPump(EmulatedSerialCOM):
         return f"{self.ready}"
 
     def query(self):
+        """Emulate busy behavior and return status of pump"""
         self.counter += 1
         if self.counter > self.counter_thresh:
             self.ready = "`"
@@ -363,12 +368,19 @@ class EmulatedPump(EmulatedSerialCOM):
         return f"{self.ready}{self.position}"
 
     def init(self):
+        """Initialize pump."""
         self.ready = "@"
         self.position = "0"
         self.counter = 0
         self.counter_thresh = 1
         return f"{self.ready}"
 
+
+"""
+ID -> query id (int) of valve
+NP -> query number of ports (int) on valve
+CP -> query current position (int) of valve
+"""
 
 VALVE_ID = re.compile(r"ID\s+=\s+([\w|\s]+)")
 VALVE_NP = re.compile(r"NP\s+=\s+(\d+)")
@@ -537,14 +549,18 @@ class EmulatedValve(EmulatedSerialCOM):
             return response
 
     def go(self, position) -> str:
+        """Move valve to position."""
         self.position = int(position)
         return ""
 
     def cp(self) -> str:
+        """Return current position of valve."""
         return f"Position is  = {self.position}"
 
     def id(self) -> str:
+        """Return ID of valve."""
         return f"ID = {self._id}"
 
     def np(self) -> str:
+        """Return number of available ports on the valve."""
         return f"NP = {self.n_ports}"

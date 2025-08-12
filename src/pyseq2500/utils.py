@@ -6,9 +6,6 @@ import shutil
 import tomlkit
 from pathlib import Path
 from . import ALIAS
-from serial.tools.list_ports import comports
-from pyseq_core.utils import map_coms
-from .com import SerialCOM
 
 
 LOGGER = logging.getLogger("PySeq")
@@ -87,8 +84,3 @@ for fc in HW_CONFIG["flowcells"]:
 
 This is loaded from the `DEFAULT_CONFIG_PATH` TOML file.
 """
-
-
-address_dict = {dev.serial_number: dev.device for dev in comports()}
-COM_DICT = map_coms(SerialCOM, address_dict, HW_CONFIG)
-"""Dictionary mapping address (dev.serial_number) to COM port (dev.device)"""

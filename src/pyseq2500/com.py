@@ -5,6 +5,9 @@ from functools import cached_property
 import logging
 import io
 from typing import Union
+from pyseq2500.utils import HW_CONFIG
+from serial.tools.list_ports import comports
+from pyseq_core.utils import map_coms
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -15,7 +18,6 @@ class SerialCOM(BaseCOM):
     rx: Serial = field(init=False)
     rx_address: str = field(default=None)
     com: io.TextIOWrapper = field(init=False)
-    _connected: bool = field(default=False)
 
     @cached_property
     def prefix(self):
@@ -76,6 +78,12 @@ class SerialCOM(BaseCOM):
 
 @define(kw_only=True)
 class EmulatedSerialCOM(BaseCOM):
+    _connect: bool = field(default=False)
+
+    @property
+    def connected(self):
+        return self._connected
+
     @cached_property
     def prefix(self):
         return self.config["prefix"]
@@ -87,8 +95,9 @@ class EmulatedSerialCOM(BaseCOM):
     async def connect(self) -> None:
         """Emulate connection to serial port"""
         async with self.lock:
-            LOGGER.debug(f"{self.name} emulating connection to {self.address}")
             self.com = True
+            self._connected = True
+        LOGGER.debug(f"{self.name} connected to {self.address}")
 
     async def close(self) -> bool:
         """Emulate closing a connection to serial port.
@@ -98,8 +107,14 @@ class EmulatedSerialCOM(BaseCOM):
         """
         async with self.lock:
             LOGGER.debug(f"{self.name} emulating closing connection to {self.address}")
+            self._connected = False
         return True
 
     def response(self, response):
         """Format response"""
         return f"{self.prefix}{response}{self.suffix}"
+
+
+address_dict = {dev.serial_number: dev.device for dev in comports()}
+COM_DICT = map_coms(SerialCOM, address_dict, HW_CONFIG)
+"""Dictionary mapping address (dev.serial_number) to COM port (dev.device)"""

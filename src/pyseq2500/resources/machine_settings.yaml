@@ -5,6 +5,14 @@
 name: Test                                                                      # name of sequencer
 Test:                                                                           # settings for a specific sequencer
   flowcells: ['A', 'B']                                                         # list of flow cell names 
+  FlowCellA:
+    inlet_port: 
+      2: 2
+      8: 3 
+  FlowCellB:
+    inlet_port: 
+      2: 4
+      8: 5
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600

@@ -1,4 +1,4 @@
-from pyseq2500.utils import HW_CONFIG, COM_DICT
+from pyseq2500.com import COM_DICT
 from pyseq2500.fluidics import Pump, EmulatedPump, Valve, EmulatedValve
 import pytest
 import asyncio
@@ -15,11 +15,12 @@ import asyncio
 def pump(request) -> Pump:
     name = request.param
     if name == "MockPump":
-        config = HW_CONFIG["PumpB"]["com"]
-        com = EmulatedPump(name="PumpB", address=request.param, config=config)
+        com = EmulatedPump(name="PumpB", address="PumpCOM")
+        interval = 0.5
     else:
         com = COM_DICT[request.param]
-    return Pump(name=com.name, com=com)
+        interval = 1
+    return Pump(name=com.name, com=com, interval=interval)
 
 
 @pytest.mark.fluidic
@@ -33,7 +34,7 @@ class TestPump:
         assert pump.barrels_per_lane > 0
 
         await pump.com.connect()
-        assert pump.com.com is not None
+        assert pump.connected
 
         await pump.initialize()
         assert pump.ready
@@ -114,8 +115,7 @@ def valve(request) -> Valve:
     name = request.param
     if name == "MockValve":
         _name = "Valve24B"
-        config = HW_CONFIG[_name]["com"]
-        com = EmulatedValve(name=_name, address=request.param, config=config)
+        com = EmulatedValve(name=_name, address=request.param)
     else:
         com = COM_DICT[request.param]
     return Valve(name=com.name, com=com)

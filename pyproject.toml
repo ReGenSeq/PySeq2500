@@ -48,7 +48,7 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli_level = "DEBUG"
 asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
-addopts = '-m "not hardware"'
+addopts = '-k "not hardware and not slow"'
 markers = """
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components
@@ -57,4 +57,5 @@ markers = """
     control: tests involving only control routines, no hardware
     mock: tests using mock or emulated instruments
     diagnostic: quick test to check health of instrumentation
+    slow: slow tests 
     """
