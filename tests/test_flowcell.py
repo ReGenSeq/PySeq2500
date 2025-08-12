@@ -6,19 +6,11 @@ import pytest_asyncio
 import asyncio
 
 
-# @pytest.fixture(
-#     params=[
-#         pytest.param("B", marks=pytest.mark.mock),
-#         # pytest.param("FlowCellA", marks=pytest.mark.hardware),
-#         # pytest.param("FlowCellB", marks=pytest.mark.hardware),
-#     ],
-#     scope="session",
-# )
 @pytest_asyncio.fixture(
     params=[
         pytest.param("B", marks=pytest.mark.mock),
-        # pytest.param("FlowCellA", marks=pytest.mark.hardware),
-        # pytest.param("FlowCellB", marks=pytest.mark.hardware),
+        pytest.param("FlowCellA", marks=pytest.mark.hardware),
+        pytest.param("FlowCellB", marks=pytest.mark.hardware),
     ],
     scope="class",
 )

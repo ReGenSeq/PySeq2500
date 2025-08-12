@@ -127,23 +127,15 @@ class Pump(BasePump):
         while not await self.status():
             await asyncio.sleep(self._interval)
 
-    async def configure(self, exp_config: dict = None, barrels_per_lane: int = None):
-        """Configures the pump based on its loaded settings.
+    async def configure(self):
+        """Configures volume and flow rate limits based on barrels_per_lane.
 
-        This method applies specific configuration parameters from `self.config`
-        to the physical pump hardware. This might include setting operating modes,
-        calibration values, or other device-specific settings.
+        The number of syringe barrels dedicated to a flow cell lane is set by
+        the `barrels_per_lane` setting in the pump section of the machine_settings,
+        and is used to calculate the min/max volume and min/max flow rate per lane.
         """
 
-        if exp_config is not None:
-            self.barrels_per_lane = exp_config[self.name]["barrels_per_lane"]
-        elif barrels_per_lane is not None:
-            self.barrels_per_lane = barrels_per_lane
-        else:
-            self.barrels_per_lane = self.config["barrels_per_lane"]
-            warn(
-                f"{self.name} using default hardware barrels_per_lane = {self.barrels_per_lane}."
-            )
+        self.barrels_per_lane = self.config["barrels_per_lane"]
 
         self.max_volume = self.barrel_volume * self.barrels_per_lane
         self.min_volume = self.max_volume / self.steps
@@ -182,7 +174,7 @@ class Pump(BasePump):
             )
             flow = self.max_flow_rate
         if flow < self.min_flow_rate:
-            warn(f"{flow} < min min rate, pumping at {self.min_flow_rate} {units}")
+            warn(f"{flow} < min flow rate, pumping at {self.min_flow_rate} {units}")
             flow = self.min_flow_rate
         else:
             return int(round(flow / 60 * self.steps / self.max_volume))

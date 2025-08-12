@@ -96,6 +96,7 @@ class TestPump:
 
         assert pump.position == 0
 
+    @pytest.mark.diagnostic
     async def test_shutdown(self, pump: Pump):
         await pump.shutdown()
         assert pump.position == 0
@@ -123,8 +124,8 @@ def valve(request) -> Valve:
 
 @pytest.mark.fluidic
 @pytest.mark.asyncio
+@pytest.mark.diagnostic
 class TestValve:
-    @pytest.mark.diagnostic
     async def test_init(self, valve: Valve):
         await valve.com.connect()
         assert valve.com.com is not None
@@ -133,7 +134,6 @@ class TestValve:
         assert valve.n_ports == 10 or valve.n_ports == 24
         assert valve.port > 0
 
-    @pytest.mark.diagnostic
     async def test_select(self, valve: Valve):
         port = valve.config["port"]["valid_list"][1]
         await valve.select(port)
