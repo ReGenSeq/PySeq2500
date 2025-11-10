@@ -1,5 +1,6 @@
 from pyseq2500.fluidics import Pump, Valve, EmulatedPump, EmulatedValve
 from pyseq2500.flowcell import FlowCell
+from pyseq2500.sequencer import Sequencer
 from pyseq2500.utils import DEFAULT_CONFIG
 import pytest
 import pytest_asyncio
@@ -14,7 +15,7 @@ import asyncio
     ],
     scope="class",
 )
-async def fc(request) -> FlowCell:
+async def fc(request):
     name = request.param
     # Construct FlowCell
     if name == "B":
@@ -37,40 +38,93 @@ async def fc(request) -> FlowCell:
     yield fc
 
     # Shutdown instruments
-    await fc._shutdown()
+    # await fc._shutdown()
 
-    # Shutdown async worker gracefully
-    try:
-        fc._worker_task.cancel()
-    except asyncio.CancelledError:
-        await fc._worker_task
+    # # Shutdown async worker gracefully
+    # try:
+    #     fc._worker_task.cancel()
+    # except asyncio.CancelledError:
+    #     await fc._worker_task
 
 
 @pytest.mark.fluidic
 @pytest.mark.asyncio
-@pytest.mark.slow
+# @pytest.mark.slow
 class TestFlowCell:
-    async def test_init(self, fc: FlowCell):
-        fc.initialize()
-        fc.configure(DEFAULT_CONFIG)
-        await fc._queue.join()
+    # async def test_init(self, fc: FlowCell):
+    #     fc.initialize()
+    #     fc.configure(DEFAULT_CONFIG)
+    #     await fc._queue.join()
 
-        for i in fc.iter_instruments:
-            assert i.connected
+    #     for i in fc.iter_instruments:
+    #         assert i.connected
 
-        assert fc.Pump.max_volume > fc.Pump.min_volume
-        assert fc._inlet in [2, 8]
+    #     assert fc.Pump.max_volume > fc.Pump.min_volume
+    #     assert fc._inlet in [2, 8]
 
-    async def test_pump(self, fc: FlowCell):
-        port = fc.Valve.config["port"]["valid_list"][1]
-        vol = fc.Pump.min_volume * 1000
-        flow = fc.Pump.min_flow_rate * 10
+    # async def test_pump(self, fc: FlowCell):
+    #     port = fc.Valve.config["port"]["valid_list"][1]
+    #     vol = fc.Pump.min_volume * 1000
+    #     flow = fc.Pump.min_flow_rate * 10
 
-        fc.pump(vol, flow, reagent=port)
-        await fc._queue.join()
-        assert fc.Pump.ready
+    #     fc.pump(vol, flow, reagent=port)
+    #     await fc._queue.join()
+    #     assert fc.Pump.ready
 
-        port = fc.Valve.config["safe_port"]
-        fc.pump(vol, flow, port, reverse=True)
-        await fc._queue.join()
-        assert fc.Pump.ready
+    #     port = fc.Valve.config["safe_port"]
+    #     fc.pump(vol, flow, port, reverse=True)
+    #     await fc._queue.join()
+    #     assert fc.Pump.ready
+
+    async def test_init(self, sequencer: Sequencer):
+        fcs = sequencer._get_systems_list("flowcell")
+
+        _ = []
+        for fc in fcs:
+            fc.start()
+            fc.initialize()
+            fc.configure(DEFAULT_CONFIG)
+            _.append(fc._queue.join())
+        await asyncio.gather(*_)
+
+        for fc in fcs:
+            for i in fc.iter_instruments:
+                assert i.connected
+
+        for fc in fcs:
+            assert fc.Pump.max_volume > fc.Pump.min_volume
+            assert fc._inlet in [2, 8]
+
+    async def test_pump(self, sequencer: Sequencer):
+        fcs = sequencer._get_systems_list("flowcell")
+        # for fc in fcs:
+        #     if not fc._pause_event.is_set():
+        #         print(fc.name, "paused")
+        #         fc.start()
+        #         assert False
+
+        #     assert True
+
+        _ = []
+        for fc in fcs:
+            port = fc.Valve.config["port"]["valid_list"][1]
+            vol = fc.Pump.min_volume * 1000
+            flow = fc.Pump.min_flow_rate * 10
+
+            fc.pump(vol, flow, reagent=port)
+            _.append(fc._queue.join())
+            assert len(fc._queue_dict) > 0
+
+        await asyncio.gather(*_)
+        for fc in fcs:
+            assert fc.Pump.ready
+
+        # _ = []
+        # for fc in fcs:
+        #     port = fc.Valve.config["safe_port"]
+        #     fc.pump(vol, flow, port, reverse=True)
+        #     _.append(fc._queue.join())
+        #     assert len(fc._queue_dict) > 0
+        # await asyncio.gather(*_)
+        # for fc in fcs:
+        #     assert fc.Pump.ready

@@ -91,12 +91,14 @@ class Pump(BasePump):
 
     async def shutdown(self):
         """Return pump to idle ready state."""
-
+        LOGGER.debug("Shutting down {self.name}")
         await self.wait_for_ready()
-        await self.command("A0V7000OR")  # push all fluid out to waste
-        await self.wait_for_ready()
+        if self.position != 0:
+            await self.command("A0V7000OR")  # push all fluid out to waste
+            await self.wait_for_ready()
         await self.command("A0IR")  # move valve to default state
         await self.wait_for_ready()
+        LOGGER.info("Safely shutdown {self.name}")
 
     async def status(self) -> bool:
         """Query pump for status and position.
@@ -183,7 +185,7 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: Union[float, int],
+        pause_time: Union[float, int] = 0.1,
         waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
@@ -440,7 +442,9 @@ class Valve(BaseValve):
 
     async def shutdown(self):
         """Put the valve in safe port state."""
-        await self.command(f"GO{self.config['safe_port']}")
+        LOGGER.debug("Shutting down {self.name}")
+        await self.select(self.config["safe_port"])
+        LOGGER.info("Safely shutdown {self.name}")
 
     async def status(self) -> bool:
         return self._status

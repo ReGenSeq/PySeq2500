@@ -3,7 +3,8 @@
 # The settings used is specified by `name`
 # Software settings should go in default.toml
 name: Test                                                                      # name of sequencer
-Test:                                                                           # settings for a specific sequencer
+Test:
+  name: Test                                                                           # settings for a specific sequencer
   flowcells: ['A', 'B']                                                         # list of flow cell names 
   FlowCellA:
     inlet_port: 
