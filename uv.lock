@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 
 [[package]]
@@ -381,7 +381,7 @@ dev = [
 requires-dist = [
     { name = "attrs", specifier = ">=25.3.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pyseq-core", specifier = ">=1.0.8a0" },
+    { name = "pyseq-core", specifier = ">=1.1.0a0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "tomlkit", specifier = ">=0.13.3" },
 ]
