@@ -259,7 +259,6 @@ class Pump(BasePump):
         while self.position != pos:
             await self.command(f"OA{pos}V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
         # Allow pressure to equalize
         await asyncio.sleep(pause_time)
@@ -270,7 +269,6 @@ class Pump(BasePump):
         while self.position != 0:
             await self.command(f"IA0V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
     @property
     def ready(self) -> bool:
@@ -425,8 +423,8 @@ class Valve(BaseValve):
         response = await self.command("ID")
         match = re.search(VALVE_ID, response)
         if match:
-            ID = match.groups()[0]
-            if ID != "not used":
+            ID = match.groups()[0].strip()
+            if ID.strip() != "not used":
                 self.com.prefix = ID
 
         # Get number of ports on valve
@@ -440,7 +438,7 @@ class Valve(BaseValve):
 
     async def shutdown(self):
         """Put the valve in safe port state."""
-        await self.command(f"GO{self.config['safe_port']}")
+        await self.select(self.config["safe_port"])
 
     async def status(self) -> bool:
         return self._status

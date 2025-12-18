@@ -30,25 +30,29 @@ class SerialCOM(BaseCOM):
     async def connect(self, baudrate: int = 9600, timeout: int = 1) -> Union[None, str]:
         if not self._connected:
             async with self.lock:
-                tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
+                self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                 address = self.address
 
                 if self.rx_address is not None:
                     # Add seperate response serial port, like for HiSeq 2500 FPGA
-                    rx = Serial(
+                    self.rx = Serial(
                         port=self.rx_address, baudrate=baudrate, timeout=timeout
                     )
                     address += " and {self.rx._address}"
                 else:
                     # use the same serial port for responses, most instrumentation
-                    rx = tx
+                    self.rx = self.tx
 
                 self.com = io.TextIOWrapper(
-                    io.BufferedRWPair(tx, rx), encoding="ascii", errors="ignore"
+                    io.BufferedRWPair(self.tx, self.rx),
+                    encoding="ascii",
+                    errors="ignore",
                 )
                 self._connected = True
 
-            return f"{self.name} connected to {address}"
+            LOGGER.debug(f"{self.name} connected to {address}")
+
+            return self._connected
 
     async def write(self, command: str) -> str:
         cmdid = self.bump_cmdid()
@@ -58,15 +62,15 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self, cmdid) -> str:
+    async def read(self, cmdid: str) -> str:
         response = self.com.readline()
-        LOGGER.debug(f"{self.name} :: rx {cmdid}:: {response}")
+        LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
         return response
 
     async def command(self, command: str) -> str:
         async with self.lock:
-            await self.write(command)
-            return await self.read()
+            cmdid = await self.write(command)
+            return await self.read(cmdid)
 
     async def close(self):
         async with self.lock:

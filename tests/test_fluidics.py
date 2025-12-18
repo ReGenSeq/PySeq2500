@@ -1,10 +1,11 @@
 from pyseq2500.com import COM_DICT
 from pyseq2500.fluidics import Pump, EmulatedPump, Valve, EmulatedValve
 import pytest
+import pytest_asyncio
 import asyncio
 
 
-@pytest.fixture(
+@pytest_asyncio.fixture(
     params=[
         pytest.param("MockPump", marks=pytest.mark.mock),
         pytest.param("PumpA", marks=pytest.mark.hardware),
@@ -12,15 +13,27 @@ import asyncio
     ],
     scope="class",
 )
-def pump(request) -> Pump:
+async def pump(request) -> Pump:
     name = request.param
+    interval = 0.5
     if name == "MockPump":
         com = EmulatedPump(name="PumpB", address="PumpCOM")
-        interval = 0.5
     else:
         com = COM_DICT[request.param]
-        interval = 1
-    return Pump(name=com.name, com=com, interval=interval)
+
+    p = Pump(name=com.name, com=com, interval=interval)
+    # Configure pump
+    await p.configure()
+    assert p.min_volume < p.max_volume
+    assert p.min_flow_rate < p.max_flow_rate
+    assert p.barrels_per_lane > 0
+    assert p.com.suffix == "\r"
+
+    # Connect to COM
+    await p.com.connect()
+    assert p.connected
+
+    return p
 
 
 @pytest.mark.fluidic
@@ -28,13 +41,14 @@ def pump(request) -> Pump:
 class TestPump:
     @pytest.mark.diagnostic
     async def test_init(self, pump: Pump):
-        await pump.configure()
-        assert pump.min_volume < pump.max_volume
-        assert pump.min_flow_rate < pump.max_flow_rate
-        assert pump.barrels_per_lane > 0
-
-        await pump.com.connect()
-        assert pump.connected
+        ##        await pump.configure()
+        ##        assert pump.min_volume < pump.max_volume
+        ##        assert pump.min_flow_rate < pump.max_flow_rate
+        ##        assert pump.barrels_per_lane > 0
+        ##        assert pump.com.suffix == "\r"
+        ##
+        ##        await pump.com.connect()
+        ##        assert pump.connected
 
         await pump.initialize()
         assert pump.ready
@@ -70,15 +84,15 @@ class TestPump:
 
     async def test_reverse_pump(self, pump: Pump):
         vol = pump.min_volume * 1000
-        out_flow = pump.min_flow_rate * 10
-        in_flow = pump.max_flow_rate * 0.5
+        flow = pump.min_flow_rate * 10
+        out_flow = pump.max_flow_rate * 0.8
         asyncio.create_task(
-            pump.reverse_pump(vol, out_flow, pause_time=3, waste_flow_rate=in_flow)
+            pump.reverse_pump(vol, out_flow, pause_time=3, waste_flow_rate=flow)
         )
         step = pump.vol_to_step(vol)
 
         # Wait for pump to finish aspiratin
-        await asyncio.sleep(vol / in_flow * 60)
+        await asyncio.sleep(vol / flow * 60)
         while not pump.ready:
             await asyncio.sleep(0.1)
         await asyncio.sleep(0.1)
@@ -86,7 +100,6 @@ class TestPump:
         assert pump.position == step
 
         # Wait for pump to start dispensing
-        await asyncio.sleep(vol / out_flow * 60)
         while pump.ready:
             await asyncio.sleep(0.1)
         # Wait for pump to finish dispensing
