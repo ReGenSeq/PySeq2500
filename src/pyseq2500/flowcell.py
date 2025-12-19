@@ -20,11 +20,13 @@ class FlowCell(BaseFlowCell):
     @instruments.default
     def set_instruments(self):
         fc = self.position
-        self.instruments = {
-            "Pump": Pump(name="Pump{fc}", com=COM_DICT[f"Pump{fc}"]),
-            "Valve": Valve(name="Valve24{fc}", com=COM_DICT[f"Valve24{fc}"]),
-            "InletValve": Valve(name="Valve10{fc}", com=COM_DICT[f"Valve10{fc}"]),
+        instruments = {
+            "Pump": Pump(name=f"Pump{fc}", com=COM_DICT[f"Pump{fc}"]),
+            "Valve": Valve(name=f"Valve24{fc}", com=COM_DICT[f"Valve24{fc}"]),
+            "InletValve": Valve(name=f"Valve10{fc}", com=COM_DICT[f"Valve10{fc}"]),
         }
+
+        return instruments
 
     @property
     def InletValve(self) -> Valve:

@@ -41,15 +41,6 @@ async def pump(request) -> Pump:
 class TestPump:
     @pytest.mark.diagnostic
     async def test_init(self, pump: Pump):
-        ##        await pump.configure()
-        ##        assert pump.min_volume < pump.max_volume
-        ##        assert pump.min_flow_rate < pump.max_flow_rate
-        ##        assert pump.barrels_per_lane > 0
-        ##        assert pump.com.suffix == "\r"
-        ##
-        ##        await pump.com.connect()
-        ##        assert pump.connected
-
         await pump.initialize()
         assert pump.ready
         assert pump.position == 0
@@ -64,7 +55,7 @@ class TestPump:
         )
         step = pump.vol_to_step(vol)
 
-        # Wait for pump to finish aspiratin
+        # Wait for pump to finish aspiration
         await asyncio.sleep(vol / flow * 60)
         while not pump.ready:
             await asyncio.sleep(0.1)

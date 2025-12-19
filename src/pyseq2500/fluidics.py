@@ -1,5 +1,5 @@
 from pyseq_core.base_instruments import BasePump, BaseValve
-from pyseq_core.utils import parse
+from pyseq_core.utils import parse, DEFAULT_CONFIG
 from typing import Union
 import logging
 from pyseq2500.com import EmulatedSerialCOM
@@ -183,7 +183,7 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: Union[float, int],
+        pause_time: Union[float, int] = None,
         waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
@@ -212,11 +212,13 @@ class Pump(BasePump):
             await self.wait_for_ready(delay=delay)
 
         # Allow pressure to equalize
+        if pause_time is None:
+            pause_time = DEFAULT_CONFIG["pump"]["pause_time"]
         await asyncio.sleep(pause_time)
 
         # Dispense to waste
         if waste_flow_rate is None:
-            waste_flow_rate = 0.8 * self.max_flow_rate
+            waste_flow_rate = DEFAULT_CONFIG["pump"]["waste_flow_rate"]
         delay = volume / waste_flow_rate * 60 - 2
         sps = self.flow_to_sps(waste_flow_rate)
         while self.position != 0:
@@ -231,8 +233,8 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: int = 1,
-        waste_flow_rate=None,
+        pause_time: Union[float, int] = None,
+        waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from outlet to inlet of flowcell.
 
@@ -252,7 +254,7 @@ class Pump(BasePump):
 
         # Aspirate from waste
         if waste_flow_rate is None:
-            waste_flow_rate = self.max_flow_rate * 0.5
+            waste_flow_rate = DEFAULT_CONFIG["pump"]["waste_flow_rate"]
         pos = self.vol_to_step(volume)
         sps = self.flow_to_sps(waste_flow_rate)
         delay = volume / waste_flow_rate * 60 - 2
@@ -261,6 +263,8 @@ class Pump(BasePump):
             await self.wait_for_ready(delay=delay)
 
         # Allow pressure to equalize
+        if pause_time is None:
+            pause_time = DEFAULT_CONFIG["pump"]["pause_time"]
         await asyncio.sleep(pause_time)
 
         # Dispense to flow cell
