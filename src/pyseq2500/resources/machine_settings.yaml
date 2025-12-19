@@ -65,7 +65,12 @@ Test:                                                                           
       valid_list: [4,5]                                                         # list of possible values for parameter, used for validation
     safe_port: 4
   XStage:
-    address: COM6
+    com:
+      baudrate: 9600
+      timeout: 1
+      address: IL000001A
+      prefix: ""
+      suffix: "\r"   
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     origin:                                                                     # reference step for flow cells, used in `custom_roi_factory`
       A: 100

@@ -11,6 +11,54 @@ from pyseq_core.utils import map_coms
 
 LOGGER = logging.getLogger("PySeq")
 
+# TODO: Implement asyncio serial communication
+# import serial_asyncio
+
+# class RequestResponseProtocol(asyncio.Protocol):
+#     def __init__(self):
+#         self.transport = None
+#         self.buffer = b""
+#         self._waiter = None
+
+#     def connection_made(self, transport):
+#         self.transport = transport
+#         print("Connected to instrument.")
+
+#     def data_received(self, data):
+#         self.buffer += data
+#         if b"\r\n" in self.buffer:
+#             line, self.buffer = self.buffer.split(b"\r\n", 1)
+#             response = line.decode().strip()
+
+#             # If someone is waiting for a response, give it to them
+#             if self._waiter and not self._waiter.done():
+#                 self._waiter.set_result(response)
+
+#     async def send_command(self, command, timeout=2.0):
+#         """Sends a command and waits for the specific response."""
+#         if self._waiter and not self._waiter.done():
+#             raise RuntimeError("Already waiting for a response!")
+
+#         # Create a 'Future' to represent the upcoming result
+#         self._waiter = asyncio.get_running_loop().create_future()
+
+#         # Send the data
+#         full_command = (command + "\r\n").encode()
+#         self.transport.write(full_command)
+
+#         try:
+#             # Wait for data_received to set the result or timeout
+#             return await asyncio.wait_for(self._waiter, timeout=timeout)
+#         except asyncio.TimeoutError:
+#             print(f"Command '{command}' timed out!")
+#             return None
+#         finally:
+#             self._waiter = None
+
+#     def connection_lost(self, exc):
+#         if self._waiter and not self._waiter.done():
+#             self._waiter.set_exception(ConnectionError("Serial connection lost"))
+
 
 @define(kw_only=True)
 class SerialCOM(BaseCOM):
@@ -113,6 +161,11 @@ class EmulatedSerialCOM(BaseCOM):
             LOGGER.debug(f"{self.name} emulating closing connection to {self.address}")
             self._connected = False
         return True
+
+    async def write(self, command: str) -> None:
+        cmdid = self.bump_cmdid()
+        LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
+        return cmdid
 
     def response(self, response):
         """Format response"""
