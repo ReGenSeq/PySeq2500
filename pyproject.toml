@@ -50,6 +50,7 @@ asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
 addopts = '-k "not hardware and not slow"'
 markers = """
+    stage: run test on stages
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components
     optical: tests involving optical components

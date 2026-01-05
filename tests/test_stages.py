@@ -24,22 +24,23 @@ async def xstage(request) -> XStage:
     await xstage.com.connect()
     assert xstage.connected
 
-    return xstage
+    yield xstage
+
+    # await xstage.shutdown()
 
 
 @pytest.mark.stage
 @pytest.mark.asyncio
+@pytest.mark.diagnostic
 class TestXStage:
-    @pytest.mark.diagnostic
     async def test_init(self, xstage: XStage):
         await xstage.initialize()
+        assert xstage.position == xstage.home_position
 
-    @pytest.mark.diagnostic
     async def test_move(self, xstage: XStage):
         await xstage.move(31000)
         assert xstage.position == 31000
 
-    @pytest.mark.diagnostic
     async def test_shutdown(self, xstage: XStage):
         await xstage.shutdown()
         assert xstage.position == xstage.home_position
