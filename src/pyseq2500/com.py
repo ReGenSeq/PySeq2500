@@ -75,8 +75,12 @@ class SerialCOM(BaseCOM):
     def suffix(self):
         return self.config["suffix"]
 
-    async def connect(self, baudrate: int = 9600, timeout: int = 1) -> Union[None, str]:
+    async def connect(self, baudrate: int = 0, timeout: int = 0) -> Union[None, str]:
         if not self._connected:
+            if baudrate == 0:
+                baudrate = self.config["baudrate"]
+            if timeout == 0:
+                timeout = self.config["timeout"]
             async with self.lock:
                 self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                 address = self.address
@@ -110,8 +114,10 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self, cmdid: str) -> str:
+    async def read(self, cmdid: str = "") -> str:
         response = self.com.readline()
+        if len(cmdid) == 0:
+            cmdid = f"{self._cmdid:04d}"
         LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
         return response
 

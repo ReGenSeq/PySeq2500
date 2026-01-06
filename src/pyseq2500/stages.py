@@ -173,7 +173,7 @@ class XStage(BaseStage):
         """
         if position != self.position:
             while position != await self.get_position():
-                await self.command(f"MA {position}")
+                await self.com.write(f"MA {position}")
                 while await self.status():
                     await asyncio.sleep(1)
 
@@ -306,8 +306,12 @@ class YStage(BaseStage):
     _mode: str = field(default="")
 
     async def initialize(self):
-        print(self.config)
-        await self.command("Z")  # Initialize Stage
+        await self.com.write("Z")  # Initialize/Reset Stage
+        await asyncio.sleep(2)  # Wait 2 s for stage to reset
+        await self.com.read()  # read driver name
+        await self.com.read()  # read driver version
+        await self.com.read()  # read copyright
+        await self.com.read()  # read new line
         await self.command("W(EX,0)")  # Turn off echo mode
         await self.set_mode("moving")  # Set gains and velocity to moving mode
         await self.com.write("MA")  # Set to absolute positioning mode
@@ -342,7 +346,7 @@ class YStage(BaseStage):
             position (Union[int, float]): The target position to move the stage to.
         """
         if position != self.position:
-            await self.command(f"D{position}")  # Set position
+            await self.com.write(f"D{position}")  # Set position
             await self.com.write("G")  # Go to position
             while not await self.status():
                 await asyncio.sleep(1)
@@ -386,7 +390,7 @@ class YStage(BaseStage):
             bool: True if gains were set succesfully.
         """
 
-        await self.command(f"GAINS({gains})")
+        await self.com.write(f"GAINS({gains})")
         response = await self.command("GAINS")
         response = response.strip()[1:].split(" ")
         _gains = [float(g) for g in gains.split(",")]
@@ -401,7 +405,7 @@ class YStage(BaseStage):
             bool: True if velocity was set successfully.
         """
 
-        await self.command(f"V{velocity}")
+        await self.com.write(f"V{velocity}")
         response = await self.command("V")
         response = float(response.strip()[1:])
 
