@@ -1,5 +1,6 @@
 from pyseq2500.com import COM_DICT
-from pyseq2500.stages import XStage, EmulatedXStage, EmulatedYStage, YStage
+from pyseq2500.xstage import XStage, EmulatedXStage
+from pyseq2500.ystage import EmulatedYStage, YStage
 import pytest
 import pytest_asyncio
 

@@ -121,10 +121,11 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
         return response
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read=True) -> str:
         async with self.lock:
             cmdid = await self.write(command)
-            return await self.read(cmdid)
+            if read:
+                return await self.read(cmdid)
 
     async def close(self):
         async with self.lock:
@@ -168,10 +169,13 @@ class EmulatedSerialCOM(BaseCOM):
             self._connected = False
         return True
 
-    async def write(self, command: str) -> None:
+    async def write(self, command: str) -> str:
         cmdid = self.bump_cmdid()
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
+
+    async def read(self) -> str:
+        pass
 
     def response(self, response):
         """Format response"""
