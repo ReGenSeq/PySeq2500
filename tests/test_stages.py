@@ -1,5 +1,5 @@
 from pyseq2500.com import COM_DICT
-from pyseq2500.stages import XStage, EmulatedXStage
+from pyseq2500.stages import XStage, EmulatedXStage, EmulatedYStage, YStage
 import pytest
 import pytest_asyncio
 
@@ -11,7 +11,7 @@ import pytest_asyncio
     ],
     scope="class",
 )
-async def xstage(request) -> XStage:
+async def xstage(request):
     name = request.param
     if name == "MockXStage":
         com = EmulatedXStage(address="XStageCOM")
@@ -26,7 +26,7 @@ async def xstage(request) -> XStage:
 
     yield xstage
 
-    # await xstage.shutdown()
+    await xstage.shutdown()
 
 
 @pytest.mark.stage
@@ -44,3 +44,45 @@ class TestXStage:
     async def test_shutdown(self, xstage: XStage):
         await xstage.shutdown()
         assert xstage.position == xstage.home_position
+
+
+@pytest_asyncio.fixture(
+    params=[
+        pytest.param("MockYStage", marks=pytest.mark.mock),
+        pytest.param("YStage", marks=pytest.mark.hardware),
+    ],
+    scope="class",
+)
+async def ystage(request):
+    name = request.param
+    if name == "MockYStage":
+        com = EmulatedYStage(address="YStageCOM")
+    else:
+        com = COM_DICT[request.param]
+
+    ystage = YStage(com=com)
+
+    # Connect to COM
+    await ystage.com.connect()
+    assert ystage.connected
+
+    yield ystage
+
+    await ystage.shutdown()
+
+
+@pytest.mark.stage
+@pytest.mark.asyncio
+@pytest.mark.diagnostic
+class TestYStage:
+    async def test_init(self, ystage: YStage):
+        await ystage.initialize()
+        assert ystage.position == ystage.home_position
+
+    async def test_move(self, ystage: YStage):
+        await ystage.move(1000000)
+        assert ystage.position == 1000000
+
+    async def test_shutdown(self, ystage: YStage):
+        await ystage.shutdown()
+        assert ystage.position == ystage.home_position

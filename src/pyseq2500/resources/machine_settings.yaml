@@ -81,14 +81,26 @@ Test:                                                                           
       max_val: 50000
       units: steps
   YStage:
-    address: COM7
-    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    com:
+      baudrate: 9600
+      timeout: 1
+      address: IL000002A
+      prefix: ""
+      suffix: "\r\n"   
+    spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     origin: 300                                                                 # reference step for flow cells, used in `custom_roi_factory`
     step: 200                                                                   # steps between tiles used in microscope routines
     position:
       min_val: -7000000
       max_val: 7000000
       units: steps
+    mode:
+      imaging:
+        gains: '5,10,5,2,0' 
+        velocity: 0.15400
+      moving: 
+        gains: '5,10,7,1.5,0'
+        velocity: 1
   TiltStage1: &tiltstage
     address: COM8, COM9                                                         # uses 2 communication addresses, FPGA Tx and FPGA Rx
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
