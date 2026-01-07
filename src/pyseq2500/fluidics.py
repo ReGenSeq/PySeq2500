@@ -309,7 +309,7 @@ class EmulatedPump(EmulatedSerialCOM):
     counter: int = field(default=0)
     counter_thresh: int = field(default=2)
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read: bool = True) -> str:
         """
         Asynchronously emulate sending commands and receiving response from pump.
 
@@ -337,9 +337,11 @@ class EmulatedPump(EmulatedSerialCOM):
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
-            response = f"{self.prefix}{self.id}{response}{self.suffix}"
-            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
-            return response
+
+            if read:
+                response = f"{self.prefix}{self.id}{response}{self.suffix}"
+                LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+                return response
 
     def move(self, valve, position):
         """Move syringe piston and valve."""
@@ -515,7 +517,7 @@ class EmulatedValve(EmulatedSerialCOM):
         else:
             return 24
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read: bool = True) -> str:
         """
         Asynchronously emulate sending commands and receiving response from pump.
 
@@ -543,9 +545,11 @@ class EmulatedValve(EmulatedSerialCOM):
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
-            response = f"{self.prefix}{response}{self.suffix}"
-            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
-            return response
+
+            if read:
+                response = f"{self.prefix}{response}{self.suffix}"
+                LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+                return response
 
     def go(self, position) -> str:
         """Move valve to position."""

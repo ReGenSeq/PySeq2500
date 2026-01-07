@@ -101,15 +101,26 @@ Test:                                                                           
       moving: 
         gains: '5,10,7,1.5,0'
         velocity: 1
-  TiltStage1: &tiltstage
+  FPGA:
+    com: &fpgacom
+      baudrate: 115200
+      timeout: 1
+      address: IL000004A
+      rx_address: IL000005A
+      prefix: ""
+      suffix: "\n"   
+  TiltMotor1: &tiltstage
+    com:
+      <<: *fpgacom
     address: COM8, COM9                                                         # uses 2 communication addresses, FPGA Tx and FPGA Rx
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     position: &tiltposition                                                     # &tiltposition anchor for future reference
       min_val: 0
       max_val: 30000
       units: steps
-  TiltStage2: *tiltstage
-  TiltStage3: *tiltstage
+    tolerance: 2                                                                
+  TiltMotor2: *tiltstage
+  TiltMotor3: *tiltstage
   ZStage:
     address: TiltStage                                                          # shares communication address with `TiltStage`
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
