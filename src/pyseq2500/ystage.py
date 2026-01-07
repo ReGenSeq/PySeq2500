@@ -116,6 +116,25 @@ class EmulatedYStage(EmulatedSerialCOM):
 
 @define(kw_only=True)
 class YStage(BaseStage):
+    """Concrete implementation for the X Stage.
+
+    This class provides a specific implementation for the abstract methods
+    defined in `BaseStage`, allowing for control of a physical stage device.
+    It handles communication with the stage move and read the stage position.
+
+    Inherited BaseInstrument Attributes:
+        name (str): The name of this specific pump instance.
+        com (BaseCOM): The communication interface configured for this pump.
+        config (dict): The loaded configuration settings for this pump.
+
+    Inherited BasePump Attributes:
+        _position (Union[int, float]): The cached current position of the stage.
+            This attribute is not initialized directly but is set by the `position` setter.
+
+    Inherited BaseInstrument Methods:
+        command (str) -> str: Send a command string/dict to the stage.
+    """
+
     name: str = field(default="YStage")
     home_position: int = field(default=0)
     _mode: str = field(default="")

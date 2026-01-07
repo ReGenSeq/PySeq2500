@@ -119,13 +119,23 @@ Test:                                                                           
       max_val: 65000
       units: steps
   redLaser: 
-      address: COM10
-      power: &red_laser                                                         # &red_laser anchor for future reference
-        min_val: 0
-        max_val: 400
-        units: mW
+    com:
+      baudrate: 9600
+      timeout: 1
+      address: IL000007A
+      prefix: ""
+      suffix: "\r"  
+    power: &red_laser                                                         # &red_laser anchor for future reference
+      min_val: 0
+      max_val: 400
+      units: mW
   greenLaser: 
-    address: COM11
+    com:
+      baudrate: 9600
+      timeout: 1
+      address: IL000006A
+      prefix: ""
+      suffix: "\r"  
     power: &green_laser                                                         # &green_laser anchor for future reference
       min_val: 0
       max_val: 400 

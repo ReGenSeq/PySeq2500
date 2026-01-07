@@ -55,6 +55,11 @@ class Pump(BasePump):
         min_flow_rate (Union[float, int]): The minimum allowed flow rate.
         max_flow_rate (Union[float, int]): The maximum allowed flow rate.
 
+    Pump Attributes:
+        _interval (Union[int, float]): Time (s) between status queries.
+        _ready (bool): Cached ready status of the pump.
+        _position (int): Cached position of the pump piston.
+        barrels_per_lane (int): Number of syringe barrels dedicated to each flow cell lane.
 
     Inherited BaseInstrument Methods:
         command(Union[str,dict]) -> Union[str,dict]: Send a command string/dict

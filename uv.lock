@@ -342,7 +342,7 @@ wheels = [
 [[package]]
 name = "pyseq-core"
 version = "1.1.0a0"
-source = { git = "https://github.com/ReGenSeq/pyseq_core.git#0c5219fc63d711fa40efa715a396d292809a48a6" }
+source = { git = "https://github.com/ReGenSeq/pyseq_core.git#6acb1703afedc2bd1d9ca09356869f23eff22914" }
 dependencies = [
     { name = "attrs" },
     { name = "pre-commit" },
