@@ -2,6 +2,7 @@ from pyseq2500.com import COM_DICT
 from pyseq2500.laser import Laser, EmulatedLaser
 import pytest
 import pytest_asyncio
+import asyncio
 
 
 @pytest_asyncio.fixture(
@@ -40,8 +41,12 @@ class TestLaser:
         await laser.initialize()
 
     async def test_power(self, laser: Laser):
-        await laser.set_power(50)
-        assert laser.power == 50
+        # Test is laser power gets within 5 %
+        set_power = 50
+        await laser.set_power(set_power)
+        await asyncio.sleep(set_power / 10)
+        act_power = await laser.get_power()
+        assert 0.05 > abs(act_power / set_power - 1)
 
     async def test_status(self, laser: Laser):
         assert await laser.status()

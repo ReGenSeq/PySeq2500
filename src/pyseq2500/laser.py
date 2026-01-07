@@ -110,6 +110,7 @@ class Laser(BaseLaser):
     async def initialize(self):
         """Turn laser on and set to low power."""
         await self.command("VERSION?")  # Get firmware version
+        await self.com.read()
         await self.status()  # Get initial status
         await self.get_power()  # Get initial power
 
@@ -119,7 +120,7 @@ class Laser(BaseLaser):
 
     async def shutdown(self):
         """Turn laser off."""
-        await self.command("OFF", read=False)  # turn off the laser
+        await self.command("OFF")  # turn off the laser
 
     async def status(self) -> bool:
         """Query laser for status and power.
@@ -144,11 +145,11 @@ class Laser(BaseLaser):
         """
 
         if not self._status:
-            await self.command("ON", read=False)  # turn on the laser
+            await self.command("ON")  # turn on the laser
             await self.status()  # update status
 
         if self.power != power:
-            await self.command(f"POWER={power}", read=False)
+            await self.command(f"POWER={power}")
         await self.get_power()
 
     async def get_power(self):
