@@ -1,5 +1,5 @@
 from pyseq_core.base_instruments import BasePump, BaseValve
-from pyseq_core.utils import parse
+from pyseq_core.utils import parse, DEFAULT_CONFIG
 from typing import Union
 import logging
 from pyseq2500.com import EmulatedSerialCOM
@@ -55,6 +55,11 @@ class Pump(BasePump):
         min_flow_rate (Union[float, int]): The minimum allowed flow rate.
         max_flow_rate (Union[float, int]): The maximum allowed flow rate.
 
+    Pump Attributes:
+        _interval (Union[int, float]): Time (s) between status queries.
+        _ready (bool): Cached ready status of the pump.
+        _position (int): Cached position of the pump piston.
+        barrels_per_lane (int): Number of syringe barrels dedicated to each flow cell lane.
 
     Inherited BaseInstrument Methods:
         command(Union[str,dict]) -> Union[str,dict]: Send a command string/dict
@@ -183,7 +188,7 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: Union[float, int],
+        pause_time: Union[float, int] = None,
         waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
@@ -212,11 +217,13 @@ class Pump(BasePump):
             await self.wait_for_ready(delay=delay)
 
         # Allow pressure to equalize
+        if pause_time is None:
+            pause_time = DEFAULT_CONFIG["pump"]["pause_time"]
         await asyncio.sleep(pause_time)
 
         # Dispense to waste
         if waste_flow_rate is None:
-            waste_flow_rate = 0.8 * self.max_flow_rate
+            waste_flow_rate = DEFAULT_CONFIG["pump"]["waste_flow_rate"]
         delay = volume / waste_flow_rate * 60 - 2
         sps = self.flow_to_sps(waste_flow_rate)
         while self.position != 0:
@@ -231,8 +238,8 @@ class Pump(BasePump):
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: int = 1,
-        waste_flow_rate=None,
+        pause_time: Union[float, int] = None,
+        waste_flow_rate: Union[float, int] = None,
     ):
         """Pump a specified volume at a specified flow rate from outlet to inlet of flowcell.
 
@@ -252,16 +259,17 @@ class Pump(BasePump):
 
         # Aspirate from waste
         if waste_flow_rate is None:
-            waste_flow_rate = self.max_flow_rate * 0.5
+            waste_flow_rate = DEFAULT_CONFIG["pump"]["waste_flow_rate"]
         pos = self.vol_to_step(volume)
         sps = self.flow_to_sps(waste_flow_rate)
         delay = volume / waste_flow_rate * 60 - 2
         while self.position != pos:
             await self.command(f"OA{pos}V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
         # Allow pressure to equalize
+        if pause_time is None:
+            pause_time = DEFAULT_CONFIG["pump"]["pause_time"]
         await asyncio.sleep(pause_time)
 
         # Dispense to flow cell
@@ -270,7 +278,6 @@ class Pump(BasePump):
         while self.position != 0:
             await self.command(f"IA0V{sps}R")
             await self.wait_for_ready(delay=delay)
-            delay = 0
 
     @property
     def ready(self) -> bool:
@@ -302,7 +309,7 @@ class EmulatedPump(EmulatedSerialCOM):
     counter: int = field(default=0)
     counter_thresh: int = field(default=2)
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read: bool = True) -> str:
         """
         Asynchronously emulate sending commands and receiving response from pump.
 
@@ -330,9 +337,11 @@ class EmulatedPump(EmulatedSerialCOM):
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
-            response = f"{self.prefix}{self.id}{response}{self.suffix}"
-            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
-            return response
+
+            if read:
+                response = f"{self.prefix}{self.id}{response}{self.suffix}"
+                LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+                return response
 
     def move(self, valve, position):
         """Move syringe piston and valve."""
@@ -425,8 +434,8 @@ class Valve(BaseValve):
         response = await self.command("ID")
         match = re.search(VALVE_ID, response)
         if match:
-            ID = match.groups()[0]
-            if ID != "not used":
+            ID = match.groups()[0].strip()
+            if ID.strip() != "not used":
                 self.com.prefix = ID
 
         # Get number of ports on valve
@@ -440,7 +449,7 @@ class Valve(BaseValve):
 
     async def shutdown(self):
         """Put the valve in safe port state."""
-        await self.command(f"GO{self.config['safe_port']}")
+        await self.select(self.config["safe_port"])
 
     async def status(self) -> bool:
         return self._status
@@ -508,7 +517,7 @@ class EmulatedValve(EmulatedSerialCOM):
         else:
             return 24
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read: bool = True) -> str:
         """
         Asynchronously emulate sending commands and receiving response from pump.
 
@@ -536,9 +545,11 @@ class EmulatedValve(EmulatedSerialCOM):
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
-            response = f"{self.prefix}{response}{self.suffix}"
-            LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
-            return response
+
+            if read:
+                response = f"{self.prefix}{response}{self.suffix}"
+                LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+                return response
 
     def go(self, position) -> str:
         """Move valve to position."""

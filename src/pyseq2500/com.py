@@ -8,8 +8,57 @@ from typing import Union
 from pyseq2500.utils import HW_CONFIG
 from serial.tools.list_ports import comports
 from pyseq_core.utils import map_coms
+import asyncio
 
 LOGGER = logging.getLogger("PySeq")
+
+# TODO: Implement asyncio serial communication
+# import serial_asyncio
+
+# class RequestResponseProtocol(asyncio.Protocol):
+#     def __init__(self):
+#         self.transport = None
+#         self.buffer = b""
+#         self._waiter = None
+
+#     def connection_made(self, transport):
+#         self.transport = transport
+#         print("Connected to instrument.")
+
+#     def data_received(self, data):
+#         self.buffer += data
+#         if b"\r\n" in self.buffer:
+#             line, self.buffer = self.buffer.split(b"\r\n", 1)
+#             response = line.decode().strip()
+
+#             # If someone is waiting for a response, give it to them
+#             if self._waiter and not self._waiter.done():
+#                 self._waiter.set_result(response)
+
+#     async def send_command(self, command, timeout=2.0):
+#         """Sends a command and waits for the specific response."""
+#         if self._waiter and not self._waiter.done():
+#             raise RuntimeError("Already waiting for a response!")
+
+#         # Create a 'Future' to represent the upcoming result
+#         self._waiter = asyncio.get_running_loop().create_future()
+
+#         # Send the data
+#         full_command = (command + "\r\n").encode()
+#         self.transport.write(full_command)
+
+#         try:
+#             # Wait for data_received to set the result or timeout
+#             return await asyncio.wait_for(self._waiter, timeout=timeout)
+#         except asyncio.TimeoutError:
+#             print(f"Command '{command}' timed out!")
+#             return None
+#         finally:
+#             self._waiter = None
+
+#     def connection_lost(self, exc):
+#         if self._waiter and not self._waiter.done():
+#             self._waiter.set_exception(ConnectionError("Serial connection lost"))
 
 
 @define(kw_only=True)
@@ -27,28 +76,43 @@ class SerialCOM(BaseCOM):
     def suffix(self):
         return self.config["suffix"]
 
-    async def connect(self, baudrate: int = 9600, timeout: int = 1) -> Union[None, str]:
+    async def connect(self, baudrate: int = 0, timeout: int = 0) -> Union[None, str]:
         if not self._connected:
+            if baudrate == 0:
+                baudrate = self.config["baudrate"]
+            if timeout == 0:
+                timeout = self.config["timeout"]
             async with self.lock:
-                tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
+                self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                 address = self.address
+                if self.rx_address is None:
+                    self.rx_address = self.config.get("rx_address", None)
 
                 if self.rx_address is not None:
                     # Add seperate response serial port, like for HiSeq 2500 FPGA
-                    rx = Serial(
-                        port=self.rx_address, baudrate=baudrate, timeout=timeout
-                    )
-                    address += " and {self.rx._address}"
+                    port = address_dict.get(self.rx_address, None)
+                    if port is not None:
+                        self.rx_address = port
+                        self.rx = Serial(port=port, baudrate=baudrate, timeout=timeout)
+                        address += f" and {port}"
+                    else:
+                        LOGGER.error(
+                            f"Could not find coms with id {port} for {self.name}"
+                        )
                 else:
                     # use the same serial port for responses, most instrumentation
-                    rx = tx
+                    self.rx = self.tx
 
                 self.com = io.TextIOWrapper(
-                    io.BufferedRWPair(tx, rx), encoding="ascii", errors="ignore"
+                    io.BufferedRWPair(self.tx, self.rx),
+                    encoding="ascii",
+                    errors="ignore",
                 )
                 self._connected = True
 
-            return f"{self.name} connected to {address}"
+            LOGGER.debug(f"{self.name} connected to {address}")
+
+            return self._connected
 
     async def write(self, command: str) -> str:
         cmdid = self.bump_cmdid()
@@ -58,15 +122,25 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self, cmdid) -> str:
+    async def read(self, cmdid: str = "") -> str:
         response = self.com.readline()
-        LOGGER.debug(f"{self.name} :: rx {cmdid}:: {response}")
+        if len(cmdid) == 0:
+            cmdid = f"{self._cmdid:04d}"
+        LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
         return response
 
-    async def command(self, command: str) -> str:
+    async def command(self, command: str, read=True, delay=0) -> str:
         async with self.lock:
-            await self.write(command)
-            return await self.read()
+            cmdid = await self.write(command)
+
+            if read:
+                await asyncio.sleep(delay)
+
+                if isinstance(read, bool):
+                    read = 1
+                for _ in range(read):
+                    response = await self.read(cmdid)
+                return response
 
     async def close(self):
         async with self.lock:
@@ -109,6 +183,14 @@ class EmulatedSerialCOM(BaseCOM):
             LOGGER.debug(f"{self.name} emulating closing connection to {self.address}")
             self._connected = False
         return True
+
+    async def write(self, command: str) -> str:
+        cmdid = self.bump_cmdid()
+        LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
+        return cmdid
+
+    async def read(self) -> str:
+        pass
 
     def response(self, response):
         """Format response"""

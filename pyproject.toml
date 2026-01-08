@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
     "attrs>=25.3.0",
     "pydantic>=2.11.7",
-    "pyseq-core>=1.0.8a0",
+    "pyseq-core @ git+https://github.com/ReGenSeq/pyseq_core.git",
     "pyyaml>=6.0.2",
     "tomlkit>=0.13.3",
 ]
@@ -50,6 +50,7 @@ asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
 addopts = '-k "not hardware and not slow"'
 markers = """
+    stage: run test on stages
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components
     optical: tests involving optical components

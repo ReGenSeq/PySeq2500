@@ -1,10 +1,12 @@
 import logging
 import os
-import importlib
+from importlib import resources
 import yaml
 import shutil
 import tomlkit
 from pathlib import Path
+
+##from pyseq_core.utils import RESOURCE_PATH
 from . import ALIAS
 
 
@@ -14,7 +16,7 @@ LOGGER = logging.getLogger("PySeq")
 # --- MACHINE_SETTINGS Configuration ---
 # This section handles the loading of machine-specific hardware configurations.
 # Local machine specific settings
-RESOURCE_PATH = importlib.resources.files(ALIAS)
+RESOURCE_PATH = resources.files(ALIAS)
 MACHINE_SETTINGS_PATH = Path.home() / ".config/pyseq/machine_settings.yaml"
 MACHINE_SETTINGS_RESOURCE = RESOURCE_PATH.joinpath("resources/machine_settings.yaml")
 """Path to the machine-specific hardware configuration YAML file.
@@ -32,7 +34,7 @@ if not MACHINE_SETTINGS_PATH.exists():
     # Copy settings from package if local machine setting do not exist
     os.makedirs(MACHINE_SETTINGS_PATH.parent, exist_ok=True)
     os.makedirs(MACHINE_SETTINGS_PATH.parent / "logs", exist_ok=True)
-    resource_path = importlib.resources.files(ALIAS)
+    resource_path = resources.files(ALIAS)
     shutil.copy(MACHINE_SETTINGS_RESOURCE, MACHINE_SETTINGS_PATH)
 
 with open(MACHINE_SETTINGS_PATH, "r") as f:
@@ -58,7 +60,7 @@ package resources is used. Otherwise, it defaults to `~/.config/pyseq/default.to
 
 if not DEFAULT_CONFIG_PATH.exists():
     # Copy settings from package if local machine setting do not exist
-    resource_path = importlib.resources.files(ALIAS)
+    # resource_path = importlib.resources.files(ALIAS)
     shutil.copy(DEFAULT_CONFIG_RESOURCE, DEFAULT_CONFIG_PATH)
 
 # Default settings for experiment/software
@@ -76,7 +78,7 @@ if os.environ.get("PYTEST_VERSION") is not None and "test" in machine_name.lower
 # Read default config and machine settings
 DEFAULT_CONFIG = tomlkit.parse(open(DEFAULT_CONFIG_PATH).read())
 for fc in HW_CONFIG["flowcells"]:
-    # Copy barrels_per_lane from HW_CONFIG to DEFAUL_CONFIG to configure pumpes
+    # Copy barrels_per_lane from HW_CONFIG to DEFAULT_CONFIG to configure pumpes
     p = f"Pump{fc}"
     DEFAULT_CONFIG[p] = {"barrels_per_lane": HW_CONFIG[p]["barrels_per_lane"]}
 

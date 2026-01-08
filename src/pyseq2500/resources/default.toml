@@ -55,6 +55,12 @@ tilt2 = 21500
 tilt3 = 21500
 z_init = 30000  
 
+[XStage]
+min_val = 1000
+max_val = 50000
+EM = 2                                                                          # echo mode to respond only to print and list commands   
+
+
 
 [optics]
 # Sequencer specific optical parameters for imaging, exposing, or focusing
