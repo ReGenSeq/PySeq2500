@@ -31,7 +31,7 @@ class EmulatedTiltMotor(EmulatedSerialCOM):
     def id(self):
         return self.name[-1]
 
-    async def command(self, command: str, read: bool = True) -> str:
+    async def command(self, command: str, read: bool = True, delay: int = 0) -> str:
         """
         Asynchronously emulate sending commands and receiving response from TiltMotor.
 

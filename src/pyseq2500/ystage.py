@@ -70,7 +70,7 @@ class EmulatedYStage(EmulatedSerialCOM):
                 response = ""
 
             if read:
-                response = f"{self.prefix}{response}{self.suffix}"
+                response = f"{response}{self.suffix}"
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
 
