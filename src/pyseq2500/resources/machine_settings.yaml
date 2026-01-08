@@ -108,8 +108,8 @@ Test:                                                                           
       address: IL000004A
       rx_address: IL000005A
       prefix: ""
-      suffix: "\n"   
-  TiltMotor1: &tiltstage
+      suffix: "\n"  
+  TiltStage: &tiltstage
     com:
       <<: *fpgacom
     spum: 0.656                                                                 # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
@@ -117,7 +117,10 @@ Test:                                                                           
       min_val: 0
       max_val: 30000
       units: steps
-    tolerance: 2                                                                
+    tolerance: 2   
+  TiltMotor1: *tiltstage
+  TiltMotor2: *tiltstage
+  TiltMotor3: *tiltstage                                                             
   ZStage:
     address: TiltStage                                                          # shares communication address with `TiltStage`
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
