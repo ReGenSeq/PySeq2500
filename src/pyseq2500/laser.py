@@ -109,8 +109,7 @@ class Laser(BaseLaser):
 
     async def initialize(self):
         """Turn laser on and set to low power."""
-        await self.command("VERSION?")  # Get firmware version
-        await self.com.read()
+        await self.command("VERSION?", read=2)  # Get firmware version
         await self.status()  # Get initial status
         await self.get_power()  # Get initial power
 

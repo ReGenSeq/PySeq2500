@@ -112,15 +112,12 @@ Test:                                                                           
   TiltMotor1: &tiltstage
     com:
       <<: *fpgacom
-    address: COM8, COM9                                                         # uses 2 communication addresses, FPGA Tx and FPGA Rx
-    spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    spum: 0.656                                                                 # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     position: &tiltposition                                                     # &tiltposition anchor for future reference
       min_val: 0
       max_val: 30000
       units: steps
     tolerance: 2                                                                
-  TiltMotor2: *tiltstage
-  TiltMotor3: *tiltstage
   ZStage:
     address: TiltStage                                                          # shares communication address with `TiltStage`
     spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`

@@ -101,8 +101,7 @@ class TestYStage:
     scope="class",
 )
 async def tiltstage(request):
-    name = request.param
-    if name == "MockTiltStage":
+    if request.param == "MockTiltStage":
         # Fake com not used to create TiltStage
         dumcom = EmulatedTiltMotor(name="TiltStage", address="TiltStageCOM")
         tiltstage = TiltStage(com=dumcom)
@@ -118,12 +117,12 @@ async def tiltstage(request):
             tiltstage.tilts[id] = TiltMotor(name=f"TiltMotor{id}", com=com)
 
     else:
-        com = COM_DICT[request.param]
+        com = COM_DICT["FPGA"]
         tiltstage = TiltStage(com=com)
 
     # Connect to COM
-    await tiltstage.com.connect()
-    assert tiltstage.com.connected
+    await tiltstage.connect()
+    assert tiltstage.connected
 
     yield tiltstage
 
@@ -140,7 +139,6 @@ class TestTiltStage:
             assert pos == 0
 
     async def test_move(self, tiltstage: TiltStage):
-        print(tiltstage.tilts[1].config)
         position = 5000
         await tiltstage.move(position)
         for i, pos in enumerate(tiltstage.position):

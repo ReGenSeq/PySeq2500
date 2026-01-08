@@ -8,6 +8,7 @@ from typing import Union
 from pyseq2500.utils import HW_CONFIG
 from serial.tools.list_ports import comports
 from pyseq_core.utils import map_coms
+import asyncio
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -84,13 +85,20 @@ class SerialCOM(BaseCOM):
             async with self.lock:
                 self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                 address = self.address
+                if self.rx_address is None:
+                    self.rx_address = self.config.get("rx_address", None)
 
                 if self.rx_address is not None:
                     # Add seperate response serial port, like for HiSeq 2500 FPGA
-                    self.rx = Serial(
-                        port=self.rx_address, baudrate=baudrate, timeout=timeout
-                    )
-                    address += " and {self.rx._address}"
+                    port = address_dict.get(self.rx_address, None)
+                    if port is not None:
+                        self.rx_address = port
+                        self.rx = Serial(port=port, baudrate=baudrate, timeout=timeout)
+                        address += f" and {port}"
+                    else:
+                        LOGGER.error(
+                            f"Could not find coms with id {port} for {self.name}"
+                        )
                 else:
                     # use the same serial port for responses, most instrumentation
                     self.rx = self.tx
@@ -121,11 +129,18 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
         return response
 
-    async def command(self, command: str, read=True) -> str:
+    async def command(self, command: str, read=True, delay=0) -> str:
         async with self.lock:
             cmdid = await self.write(command)
+
             if read:
-                return await self.read(cmdid)
+                await asyncio.sleep(delay)
+
+                if isinstance(read, bool):
+                    read = 1
+                for _ in range(read):
+                    response = await self.read(cmdid)
+                return response
 
     async def close(self):
         async with self.lock:

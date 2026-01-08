@@ -22,7 +22,7 @@ TiCR           -> Clear the motor count registers (use after TiHM)
 @define(kw_only=True)
 class EmulatedTiltMotor(EmulatedSerialCOM):
     _position: str = field(default="DISABLED")
-    move_pattern: re.Pattern = field(default=re.compile(r"T(\d)MOVETO(\d+)"))
+    move_pattern: re.Pattern = field(default=re.compile(r"T(\d)MOVETO (\d+)"))
     rd_pattern: re.Pattern = field(default=re.compile(r"T(\d)RD"))
     hm_pattern: re.Pattern = field(default=re.compile(r"T(\d)HM"))
     cr_pattern: re.Pattern = field(default=re.compile(r"T(\d)CR"))
@@ -103,11 +103,20 @@ class TiltMotor(BaseStage):
         """Initialize and home the Tilt Motor."""
         self.position = 1
         while self.position != 0:
-            await self.command(f"T{self.id}HM")  # Home Tilt Motor
+            await self.home()
             await self.status()
-            await self.command(f"T{self.id}CR")  # Clear motor count registers
+            await self.clear()
             await asyncio.sleep(0.1)
             await self.get_position()
+
+    async def home(self):
+        """Home motor."""
+        # Need to read 3 lines
+        await self.command(f"T{self.id}HM", read=2, delay=2)
+
+    async def clear(self):
+        "Clear motor register."
+        await self.command(f"T{self.id}CR", delay=1)
 
     async def configure(self):
         """Configure position limits on Tilt Motor."""
@@ -116,7 +125,7 @@ class TiltMotor(BaseStage):
 
     async def shutdown(self):
         """Return motor to home position."""
-        await self.command(f"T{self.id}HM")  # Home Tilt Motor
+        await self.home()
 
     async def status(self):
         """Waits for motor to finish moving before returning True"""
@@ -137,7 +146,7 @@ class TiltMotor(BaseStage):
         """
 
         while abs(self.position - position) >= self.tolerance:
-            await self.command(f"T{self.id}MOVETO{position}")
+            await self.command(f"T{self.id}MOVETO {position}", delay=1)
             await self.status()
 
     async def get_position(self):
@@ -147,6 +156,9 @@ class TiltMotor(BaseStage):
             int: The current position of the motor.
         """
         position = await self.command(f"T{self.id}RD")
+        while len(position.strip()) == 0:
+            position = await self.com.read()
+            await asyncio.sleep(0.1)
         self._position = int(position[5:])
 
         return self._position
@@ -180,10 +192,14 @@ class TiltStage(BaseStage):
     async def initialize(self):
         """Initialize and home the Tilt Motor."""
 
+        # Initialize FPGA
+        if self.com._cmdid == 0:
+            await self.command("RESET\n", read=2, delay=2)
+
         # Assign motors
         for i in range(1, 4):
             if self.tilts[i] is None:
-                self.tilts[i] = TiltMotor(name=i, com=self.com)
+                self.tilts[i] = TiltMotor(name=f"TiltMotor{i}", com=self.com)
 
         # Initialize tilts
         _ = []
@@ -232,7 +248,6 @@ class TiltStage(BaseStage):
         # Move motors
         _ = []
         for tilt, pos in zip(self.tilts.values(), position):
-            print(f"move {tilt.name} to {pos}")
             _.append(tilt.move(pos))
         await asyncio.gather(*_)
 

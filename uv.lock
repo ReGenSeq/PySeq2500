@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 
 [[package]]
@@ -342,7 +342,7 @@ wheels = [
 [[package]]
 name = "pyseq-core"
 version = "1.1.0a0"
-source = { git = "https://github.com/ReGenSeq/pyseq_core.git#6acb1703afedc2bd1d9ca09356869f23eff22914" }
+source = { git = "https://github.com/ReGenSeq/pyseq_core.git#e3aa3d4c86927910bc6c9d079f725c120ec115c5" }
 dependencies = [
     { name = "attrs" },
     { name = "pre-commit" },
