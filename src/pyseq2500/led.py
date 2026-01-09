@@ -18,6 +18,7 @@ LEDPULSRATE x --> set LED pulse rate to x
 COLOR_DICT = {
     "off": 0,
     "yellow": 1,
+    "pulse yellow": 2,
     "green": 3,
     "pulse green": 4,
     "blue": 5,
@@ -28,7 +29,8 @@ COLOR_DICT = {
     "waiting": 5,  # blue
     "standby": 3,  # green
     "user": 4,  # pulse green
-    "error": 1,  # yellow
+    "warning": 1,  # yellow
+    "error": 2,  # pulse yellow
 }
 
 

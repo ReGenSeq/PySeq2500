@@ -224,7 +224,7 @@ class TestLED:
         assert led.status
 
     @pytest.mark.diagnostic
-    async def test_open(self, led: led):
+    async def test_set_led(self, led: led):
         await led.set_led("imaging")
         assert led.status
 

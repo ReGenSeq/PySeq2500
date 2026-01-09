@@ -3,6 +3,7 @@ import logging
 from pyseq2500.com import EmulatedSerialCOM
 from attrs import define, field
 import re
+import asyncio
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -94,7 +95,7 @@ class FilterWheel(BaseFilter):
 
     async def configure(self):
         """Configure ID based on flowcell and update color dict."""
-        self.id = 1 if self.name[1] == "G" else 2
+        self.id = 1 if self.name[0] == "G" else 2
 
     async def shutdown(self):
         """Turn laser off."""
@@ -118,10 +119,12 @@ class FilterWheel(BaseFilter):
         position = self._filters.get(filter, None)
 
         if filter != self.filter and position is not None:
-            await self.home()
+            if self.filter != "home":
+                await self.home()
+                await asyncio.sleep(2)
             if filter != "home":
                 await self.command(f"EX{self.id}MV {position}")
-            self._filter = filter
+                self._filter = filter
         else:
             LOGGER.warning(f"{self.name} :: {filter} is not available")
 

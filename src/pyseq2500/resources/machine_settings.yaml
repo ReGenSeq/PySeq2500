@@ -105,8 +105,8 @@ Test:                                                                           
     com: &fpgacom
       baudrate: 115200
       timeout: 1
-      address: IL000004A
-      rx_address: IL000005A
+      address: IL000005A
+      rx_address: IL000004A
       prefix: ""
       suffix: "\n"  
   TiltStage: &tiltstage
@@ -117,7 +117,7 @@ Test:                                                                           
       min_val: 0
       max_val: 30000
       units: steps
-    tolerance: 2   
+    tolerance: 5   
   TiltMotor1: *tiltstage
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             

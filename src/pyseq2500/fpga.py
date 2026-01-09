@@ -69,7 +69,7 @@ class FPGA(BaseInstrument):
     """
 
     name: str = field(default="FPGA")
-    _status: str = field(init=False)
+    _status: str = field(default=False)
 
     async def initialize(self):
         """Reset the FPGA."""
@@ -93,5 +93,5 @@ class FPGA(BaseInstrument):
         return self._status
 
     async def reset(self) -> bool:
-        await self.command("RESET", read=2, delay=2)
-        self._status = True
+        response = await self.command("RESET", read=2, delay=2)
+        self._status = response.strip() == "RESET"
