@@ -168,10 +168,11 @@ class EmulatedSerialCOM(BaseCOM):
 
     async def connect(self) -> None:
         """Emulate connection to serial port"""
-        async with self.lock:
-            self.com = True
-            self._connected = True
-        LOGGER.debug(f"{self.name} connected to {self.address}")
+        if not self._connected:
+            async with self.lock:
+                self.com = True
+                self._connected = True
+            LOGGER.debug(f"{self.name} connected to {self.address}")
 
     async def close(self) -> bool:
         """Emulate closing a connection to serial port.

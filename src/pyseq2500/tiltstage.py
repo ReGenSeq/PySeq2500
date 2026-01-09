@@ -75,7 +75,7 @@ class EmulatedTiltMotor(EmulatedSerialCOM):
 
 @define(kw_only=True)
 class TiltMotor(BaseStage):
-    """Concrete implementation for the Tilt Motor.
+    """Instrument class for a Tilt Motor.
 
     This class provides a specific implementation for the abstract methods
     defined in `BaseStage`, allowing for control of the tilt motor.
@@ -191,10 +191,6 @@ class TiltStage(BaseStage):
 
     async def initialize(self):
         """Initialize and home the Tilt Motor."""
-
-        # Initialize FPGA
-        if self.com._cmdid == 0:
-            await self.command("RESET\n", read=2, delay=2)
 
         # Assign motors
         for i in range(1, 4):

@@ -64,14 +64,16 @@ EM = 2                                                                          
 
 [optics]
 # Sequencer specific optical parameters for imaging, exposing, or focusing
-# For example laser power, excitation filters, camera exposure
+# For example laser power, excitation filters, emission filter, camera exposure
 #
 power.red = 0
 power.green = 0                                                  
 filter.red = "home"
 filter.green = "home"
+filter.emission = "in"
 exposure.Camera_558_687 = 1
-exposure.Camera_610_740 = 1                                           
+exposure.Camera_610_740 = 1  
+
 
 [pump]
 # Sequencer specific pump parameters such a flow rate
