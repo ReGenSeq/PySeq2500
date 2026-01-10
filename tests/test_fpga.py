@@ -2,6 +2,7 @@ from pyseq2500.tiltstage import TiltStage, TiltMotor, EmulatedTiltMotor
 from pyseq2500.fpga import EmulatedFPGA
 from pyseq2500.led import LED, EmulatedLED
 from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
+from pyseq2500.zstage import ZStage, EmulatedZStage
 import pytest
 import pytest_asyncio
 
@@ -40,6 +41,7 @@ async def tiltstage(request, fpga):
     await tiltstage.shutdown()
 
 
+@pytest.mark.fpga
 @pytest.mark.stage
 @pytest.mark.asyncio
 class TestTiltStage:
@@ -59,6 +61,56 @@ class TestTiltStage:
     async def test_shutdown(self, tiltstage: TiltStage):
         await tiltstage.shutdown()
         assert await tiltstage.status()
+
+
+@pytest_asyncio.fixture(
+    params=[
+        pytest.param("MockZStage", marks=pytest.mark.mock),
+        pytest.param("ZStage", marks=pytest.mark.hardware),
+    ],
+    scope="session",
+)
+async def zstage(request, fpga):
+    if request.param == "MockZStage":
+        com = EmulatedZStage(address="FPGACOM")
+        await com.connect()
+        zstage = ZStage(com=com)
+
+    else:
+        # Connect and initialize FPGA before running tests
+        await fpga.connect()
+        await fpga.initialize()
+        zstage = ZStage(com=fpga.com)
+
+    yield zstage
+
+    await zstage.shutdown()
+
+
+@pytest.mark.fpga
+@pytest.mark.stage
+@pytest.mark.asyncio
+class TestZStage:
+    @pytest.mark.diagnostic
+    async def test_init(self, zstage: ZStage):
+        await zstage.initialize()
+        assert await zstage.status()
+
+    @pytest.mark.diagnostic
+    async def test_move(self, zstage: ZStage):
+        # position = int(zstage.max_position/3)
+        position = 10000
+        await zstage.move(position)
+        assert zstage.position == position
+
+        # position = int(zstage.max_position/2)
+        position = 50000
+        await zstage.move(position)
+        assert zstage.position == position
+
+    async def test_shutdown(self, zstage: ZStage):
+        await zstage.shutdown()
+        assert await zstage.status()
 
 
 @pytest_asyncio.fixture(
@@ -86,6 +138,7 @@ async def filterwheel(request, fpga):
     await filter.shutdown()
 
 
+@pytest.mark.fpga
 @pytest.mark.optical
 @pytest.mark.asyncio
 class TestFilterWheel:
@@ -129,6 +182,7 @@ async def emissionfilter(request, fpga):
     await filter.shutdown()
 
 
+@pytest.mark.fpga
 @pytest.mark.optical
 @pytest.mark.asyncio
 class TestEmissionFilter:
@@ -171,6 +225,7 @@ async def shutter(request, fpga):
     await shutter.shutdown()
 
 
+@pytest.mark.fpga
 @pytest.mark.optical
 @pytest.mark.asyncio
 class TestShutter:
@@ -215,6 +270,7 @@ async def led(request, fpga):
     await led.shutdown()
 
 
+@pytest.mark.fpga
 @pytest.mark.optical
 @pytest.mark.asyncio
 class TestLED:

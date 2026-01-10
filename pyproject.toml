@@ -50,7 +50,7 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 addopts = '-k "not hardware and not slow"'
 markers = """
-    fgpa: run test on fpga instruments
+    fpga: run test on fpga instruments
     stage: run test on stages
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components

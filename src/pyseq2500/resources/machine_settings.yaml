@@ -122,13 +122,18 @@ Test:                                                                           
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             
   ZStage:
-    address: TiltStage                                                          # shares communication address with `TiltStage`
-    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    com:
+      <<: *fpgacom                                                              # shares communication address with `TiltStage`
+    spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     step: 1                                                                     # steps between z planes used in microscope z-stack routiness
     position:
       min_val: 0
-      max_val: 65000
+      max_val: 65535
       units: steps
+    velocity: 
+      min_val: 0.1
+      max_val: 5
+      units: "mms/s"
   redLaser: 
     com:
       baudrate: 9600
