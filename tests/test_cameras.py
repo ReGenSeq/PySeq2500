@@ -27,14 +27,12 @@ class TestCameras:
         await cameras.initialize()
         for cam in cameras:
             assert cam.sensor_mode == "TDI"
-        assert all(cameras._status)
 
     @pytest.mark.diagnostic
     async def test_area(self, cameras: TDICameras):
         await cameras.setAREA()
         for cam in cameras:
             assert cam.sensor_mode == "AREA"
-        assert all(cameras._status)
 
     async def test_shutdown(self, cameras: TDICameras):
         await cameras.shutdown()

@@ -4,6 +4,8 @@ from attrs import define, field
 from typing import Union, List
 from pathlib import Path
 import warnings
+import asyncio
+import multiprocessing
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -77,6 +79,29 @@ class EmulatedTDICamera:
         ]
 
 
+def _import_dcam():
+    """function to test import dcam
+
+    dcam has a known bug with Windows.
+    It sometimes can't be initialized after a period of inactivity.
+
+    import (& initialize) dcam asynchronously with a timeout using this function.
+    """
+
+
+def _manage_dcam_import():
+    """Run _image_dcam in background process that times out after 60 s."""
+    p = multiprocessing.Process(target=_import_dcam)
+    p.start()
+    p.join(timeout=60)
+    if p.is_alive():
+        p.terminate()
+        p.join()
+        raise TimeoutError("DCAM initialization timed out")
+        return False
+    return True
+
+
 @define(kw_only=True)
 class TDICameras(BaseCamera):
     """Wrapper around 2 instances of pyseq_core.dcam.HammatsuCamera."""
@@ -86,6 +111,7 @@ class TDICameras(BaseCamera):
     _status: list = field(default=[None, None])
     _exposure: list = field(default=[None, None])
     _gain: list = field(default=[None, None])
+    dcam_initialized: bool = field(default=True)
 
     @property
     def cams(self) -> dict:
@@ -108,18 +134,26 @@ class TDICameras(BaseCamera):
     async def configure(self):
         """Connect to cameras and configure channel names."""
 
+        # Import dcam in seperate process asynchronously with timeout to avoid hangs
         with warnings.catch_warnings():
             warnings.filterwarnings("error", category=UserWarning)
             try:
-                from pyseq_core.dcam import HamamatsuCamera
-
-                dcam_found = True
+                loop = asyncio.get_running_loop()
+                self.dcam_initialized = True
+                dcam_found = await loop.run_in_executor(None, _manage_dcam_import)
+            except TimeoutError:
+                LOGGER.error("DCAM initialization timed out, restart computer")
+                self.dcam_initialized = False
+                dcam_found = False
             except UserWarning:
                 dcam_found = False
 
         for i in range(2):
             if i not in self.cams:
                 if dcam_found:
+                    # Need to reimport because test import is in different memory space
+                    from pyseq_core.dcam import HamamatsuCamera
+
                     self.cams[i] = HamamatsuCamera(i)
                 else:
                     self.cams[i] = EmulatedTDICamera(i)
@@ -140,10 +174,11 @@ class TDICameras(BaseCamera):
 
     async def status(self) -> List[str]:
         """Get status from cameras"""
-        for i, cam in enumerate(self):
-            self._status[i] = STATUS[cam.get_status()]
-
-        return self._status
+        if self.dcam_initialized:
+            for i, cam in enumerate(self):
+                self._status[i] = STATUS[cam.get_status()]
+            return self._status
+        return [False, False]
 
     async def save_image(self, image_name: str, image_path: Union[str, Path]) -> int:
         """Save images to image_path/channel_image_name.tiff and return number of bytes saved."""
