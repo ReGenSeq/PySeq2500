@@ -17,6 +17,8 @@ classifiers = [
 ]
 dependencies = [
     "attrs>=25.3.0",
+    "imageio>=2.37.2",
+    "numpy>=2.4.1",
     "pydantic>=2.11.7",
     "pyseq-core @ git+https://github.com/ReGenSeq/pyseq_core.git",
     "pyyaml>=6.0.2",
@@ -55,6 +57,7 @@ markers = """
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components
     optical: tests involving optical components
+    camera: test involving cameras
     temperature: tests involving temperature controlling components
     control: tests involving only control routines, no hardware
     mock: tests using mock or emulated instruments

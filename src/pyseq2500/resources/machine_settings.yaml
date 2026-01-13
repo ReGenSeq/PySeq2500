@@ -180,12 +180,24 @@ Test:                                                                           
       <<: *fpgacom
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}
-  Camera_558_687: &camera                                                       # &camera anchor for future reference
+  Cameras: 
     exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
-      min_val: 0.1
-      max_val: 10
+      min_val: 0.00002
+      max_val: 1.004
       units: s
-  Camera_610_740: *camera                                                       # reference settings using anchor from `Camera_558_687`                                         
+    gain: &camera_gain                                                          # &camera_exposure anchor for future reference
+      min_val: 0
+      max_val: 15
+      units: X
+    save_nt: False                                                              # save images with nucleotide name instead of emission wavelength
+    0:                                                                          # Camera ID 0 properties
+      nucleotides: "AG"
+      left_emission: 687                                                          # A
+      right_emission: 558                                                         # G
+    1:                                                                          # Camera ID 1 properties                   
+      nucleotides: "TC"  
+      left_emission: 610                                                          # T
+      right_emission: 740                                                         # C          
 # Extra validation parameters for stage beyond X, Y, Z 
 # Should align with stage table in default.toml
   stage: 
@@ -200,8 +212,8 @@ Test:                                                                           
       green: *green_laser                                                       # reference settings using anchor from power of `redLaser`
       red: *red_laser                                                           # reference settings using anchor from power of `greenLaser`
     exposure: 
-      Camera_558_687: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
-      Camera_610_740: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
+      Camera0: *camera_exposure                                                 # reference settings using anchor from exposure of `Camera0`
+      Camera1: *camera_exposure                                                 # reference settings using anchor from exposure of `Camera1`
     filter: 
       green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
       red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`
