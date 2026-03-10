@@ -1,6 +1,6 @@
 from pyseq_core.base_instruments import BaseStage
 import logging
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, SerialCOM
 from attrs import define, field
 import re
 import asyncio
@@ -136,8 +136,12 @@ class YStage(BaseStage):
     """
 
     name: str = field(default="YStage")
-    home_position: int = field(default=0)
     _mode: str = field(default="")
+    com: SerialCOM = field(default=None)  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @property
+    def home_position(self):
+        return 0
 
     async def initialize(self):
         await self.command("Z", read=False)  # Initialize/Reset Stage
@@ -154,7 +158,7 @@ class YStage(BaseStage):
         while not await self.status():
             await asyncio.sleep(1)
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """Configure position limits on XStage."""
         # Already implemented in pyseq_core
         pass

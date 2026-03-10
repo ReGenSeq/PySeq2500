@@ -10,6 +10,8 @@ LOGGER = logging.getLogger("PySeq")
 FPGA Commands
 
 RESET --> Initialize/Reset FPGA
+TDIYERD --> Read y stage position
+TDIYEWR X --> Write y stage position as X
 
 """
 
@@ -17,7 +19,11 @@ RESET --> Initialize/Reset FPGA
 @define(kw_only=True)
 class EmulatedFPGA(EmulatedSerialCOM):
     name: str = field(default="FPGA")
-    pattern: re.Pattern = field(default=re.compile(r"RESET"))
+    position: int = field(default=0)
+    initialized: bool = field(default=False)
+    reset_pattern: re.Pattern = field(default=re.compile(r"RESET"))
+    read_pattern: re.Pattern = field(default=re.compile(r"TDIYERD"))
+    write_pattern: re.Pattern = field(default=re.compile(r"TDIYEWR (\d+)"))
 
     async def command(self, command: str, read: bool = True, delay: int = 0) -> str:
         """
@@ -34,11 +40,17 @@ class EmulatedFPGA(EmulatedSerialCOM):
         async with self.lock:
             LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
 
-            match = re.search(self.pattern, command)
+            reset_match = re.search(self.reset_pattern, command)
+            read_match = re.search(self.read_pattern, command)
+            write_match = re.search(self.write_pattern, command)
 
-            if match:
+            if reset_match:
                 self.initialized = True
-                response = "FPGA initialized"
+                response = "RESET"
+            elif read_match:
+                response = f"TDIYERD {self.position}"
+            elif write_match:
+                response = self.write(write_match)
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
@@ -47,6 +59,10 @@ class EmulatedFPGA(EmulatedSerialCOM):
                 response = f"{self.prefix}{response}{self.suffix}"
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
+
+    def write(self, match: re.Match):
+        self.position = int(match.groups()[0])
+        return f"TDIYEWR {self.position}"
 
 
 @define(kw_only=True)
@@ -69,14 +85,18 @@ class FPGA(BaseInstrument):
     """
 
     name: str = field(default="FPGA")
-    _status: str = field(default=False)
+    _status: bool = field(default=False)
+
+    @property
+    def y_offset(self):
+        return 7000000
 
     async def initialize(self):
         """Reset the FPGA."""
         if not self._status:
             await self.reset()
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """No configuration needed."""
         pass
 
@@ -95,3 +115,24 @@ class FPGA(BaseInstrument):
     async def reset(self) -> bool:
         response = await self.command("RESET", read=2, delay=2)
         self._status = response.strip() == "RESET"
+
+    async def read_position(self) -> int:
+        tdi_pos = None
+        while not isinstance(tdi_pos, int):
+            try:
+                response = await self.command("TDIYERD")
+                response = response.split(" ")[1].strip()
+                tdi_pos = int(response) - self.y_offset
+            except ValueError:
+                tdi_pos = None
+        return tdi_pos
+
+    async def write_position(self, position: int):
+        while abs(await self.read_position() - position) > 5:
+            await self.command(f"TDIYEWR {position + self.y_offset}")
+
+    async def TDIARM(self, y_init: int, n_triggers: int):
+        y_pos = y_init + self.y_offset - 80000
+        await self.command(f"TDIYPOS {y_pos}+")
+        y_pos = y_init + self.y_offset - 10000
+        await self.command(f"TDIYARM3 {n_triggers} {y_pos} 1")

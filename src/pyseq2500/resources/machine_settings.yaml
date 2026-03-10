@@ -13,6 +13,8 @@ Test:                                                                           
     inlet_port: 
       2: 4
       8: 5
+  Microscope:
+    resolution: 0.375                                                           # um/px
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600
@@ -29,7 +31,6 @@ Test:                                                                           
     barrels_per_lane: 8
     max_sps: 8000                                                               # max steps per second
     min_sps: 40                                                                 # min steps per second
-
   PumpB:
     <<: *pump                                                                   # reference settings using anchor from `PumpA`
     com:
@@ -71,15 +72,16 @@ Test:                                                                           
       address: IL000001A
       prefix: ""
       suffix: "\r"   
-    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    spum: 0.4096                                                                # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     origin:                                                                     # reference step for flow cells, used in `custom_roi_factory`
-      A: 100
-      B: 200
-    step: 100                                                                   # steps between tiles used in microscope routines
+      A: 17571
+      B: 43310
+    step: 315                                                                   # steps between tiles used in microscope routines
     position:
-      min_val: 0
+      min_val: 1000
       max_val: 50000
       units: steps
+    echo_mode: 2                                                                # 2 = does not echo back commands
   YStage:
     com:
       baudrate: 9600
@@ -88,8 +90,8 @@ Test:                                                                           
       prefix: ""
       suffix: "\r\n"   
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    origin: 300                                                                 # reference step for flow cells, used in `custom_roi_factory`
-    step: 200                                                                   # steps between tiles used in microscope routines
+    origin: -180000                                                            # reference step for flow cells, used in `custom_roi_factory`
+    step: 128                                                                   # line bundle height for TDI imaging
     position:
       min_val: -7000000
       max_val: 7000000
@@ -125,7 +127,7 @@ Test:                                                                           
     com:
       <<: *fpgacom                                                              # shares communication address with `TiltStage`
     spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    step: 1                                                                     # steps between z planes used in microscope z-stack routiness
+    step: 235                                                                   # steps between z planes used in microscope z-stack routiness based on Nyquist sampling
     position:
       min_val: 0
       max_val: 65535
@@ -134,7 +136,7 @@ Test:                                                                           
       min_val: 0.1
       max_val: 5
       units: "mms/s"
-  redLaser: 
+  RedLaser: 
     com:
       baudrate: 9600
       timeout: 1
@@ -145,7 +147,7 @@ Test:                                                                           
       min_val: 0
       max_val: 400
       units: mW
-  greenLaser: 
+  GreenLaser: 
     com:
       baudrate: 9600
       timeout: 1
@@ -164,7 +166,8 @@ Test:                                                                           
       units: C
   TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
   Shutter:
-    address: TiltStage
+    com:
+      <<: *fpgacom
   EmissionFilter:
     com:
       <<: *fpgacom
@@ -180,7 +183,8 @@ Test:                                                                           
       <<: *fpgacom
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}
-  Cameras: 
+  Cameras:
+    sensor_width: 2048                                                          # width of TDI line sensor in pixels
     exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
       min_val: 0.00002
       max_val: 1.004
@@ -190,6 +194,10 @@ Test:                                                                           
       max_val: 15
       units: X
     save_nt: False                                                              # save images with nucleotide name instead of emission wavelength
+    TDI: 
+      sensor_mode_line_bundle_height: 128
+    AREA: 
+      sensor_mode_line_bundle_height: 64
     0:                                                                          # Camera ID 0 properties
       nucleotides: "AG"
       left_emission: 687                                                          # A

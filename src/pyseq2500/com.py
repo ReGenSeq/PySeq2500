@@ -4,7 +4,6 @@ from attrs import define, field
 from functools import cached_property
 import logging
 import io
-from typing import Union
 from pyseq2500.utils import HW_CONFIG
 from serial.tools.list_ports import comports
 from pyseq_core.utils import map_coms
@@ -76,7 +75,7 @@ class SerialCOM(BaseCOM):
     def suffix(self):
         return self.config["suffix"]
 
-    async def connect(self, baudrate: int = 0, timeout: int = 0) -> Union[None, str]:
+    async def connect(self, baudrate: int = 0, timeout: int = 0) -> bool:
         if not self._connected:
             if baudrate == 0:
                 baudrate = self.config["baudrate"]
@@ -112,7 +111,7 @@ class SerialCOM(BaseCOM):
 
             LOGGER.debug(f"{self.name} connected to {address}")
 
-            return self._connected
+        return self._connected
 
     async def write(self, command: str) -> str:
         cmdid = self.bump_cmdid()
@@ -140,7 +139,9 @@ class SerialCOM(BaseCOM):
                     read = 1
                 for _ in range(read):
                     response = await self.read(cmdid)
-                return response
+                return response  # pyright: ignore[reportPossiblyUnboundVariable]
+            else:
+                return ""
 
     async def close(self):
         async with self.lock:
@@ -166,13 +167,14 @@ class EmulatedSerialCOM(BaseCOM):
     def suffix(self):
         return self.config["suffix"]
 
-    async def connect(self) -> None:
+    async def connect(self) -> bool:
         """Emulate connection to serial port"""
         if not self._connected:
             async with self.lock:
                 self.com = True
                 self._connected = True
             LOGGER.debug(f"{self.name} connected to {self.address}")
+        return self._connected
 
     async def close(self) -> bool:
         """Emulate closing a connection to serial port.
@@ -190,14 +192,14 @@ class EmulatedSerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self) -> str:
+    async def read(self):
         pass
 
-    def response(self, response):
+    def response(self, response) -> str:
         """Format response"""
         return f"{self.prefix}{response}{self.suffix}"
 
 
 address_dict = {dev.serial_number: dev.device for dev in comports()}
-COM_DICT = map_coms(SerialCOM, address_dict, HW_CONFIG)
+COM_DICT = map_coms(SerialCOM, address_dict, HW_CONFIG)  # pyright: ignore[reportArgumentType]
 """Dictionary mapping address (dev.serial_number) to COM port (dev.device)"""

@@ -71,7 +71,7 @@ class EmulatedLaser(EmulatedSerialCOM):
         self._status = "DISABLED"
         return ""
 
-    def power(self, match: re.match) -> str:
+    def power(self, match: re.Match) -> str:
         g = match.groups()[0]
         if len(g) > 0:
             self._power = int(g)
@@ -105,7 +105,7 @@ class Laser(BaseLaser):
         command(str) -> str: Send a command to the pump.
     """
 
-    _status: str = field(init=False)
+    _status: bool = field(init=False)
 
     async def initialize(self):
         """Turn laser on and set to low power."""
@@ -113,7 +113,7 @@ class Laser(BaseLaser):
         await self.status()  # Get initial status
         await self.get_power()  # Get initial power
 
-    async def configure():
+    async def configure(self, exp_config: dict = {}):
         # nothing to configure for laser
         pass
 

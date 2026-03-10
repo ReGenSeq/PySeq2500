@@ -11,13 +11,13 @@ LOGGER = logging.getLogger("PySeq")
 @define
 class FlowCell(BaseFlowCell):
     _inlet: int = field(init=False)
-    instruments: dict = field(init=False)
+    instruments: dict = field(init=False)  # pyright ignore[reportGeneralTypeIssues]
 
     @property
     def position(self):
         return self.name[-1:]
 
-    @instruments.default
+    @instruments.default  # pyright ignore[reportAttributeAccessIssue]
     def set_instruments(self):
         fc = self.position
         instruments = {

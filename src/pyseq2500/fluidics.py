@@ -117,7 +117,7 @@ class Pump(BasePump):
 
         return self.ready
 
-    async def wait_for_ready(self, delay: int = 0):
+    async def wait_for_ready(self, delay: Union[int, float] = 0):
         """Query and wait for pump to be in ready state.
 
         Use the delay argument to avoid unneccesarily querying the pump,
@@ -160,7 +160,7 @@ class Pump(BasePump):
         LOGGER.debug(f"{self.name}: min flow rate = {self.min_flow_rate} {units}")
         LOGGER.debug(f"{self.name}: max flow rate = {self.max_flow_rate} {units}")
 
-    def vol_to_step(self, volume: int) -> int:
+    def vol_to_step(self, volume: Union[int, float]) -> int:
         units = self.config["volume"]["units"]
         if volume > self.max_volume:
             warn(f"{volume} > max volume, only pumping {self.max_volume} {units}")
@@ -171,25 +171,25 @@ class Pump(BasePump):
         else:
             return int(round(volume / self.max_volume * self.steps))
 
-    def flow_to_sps(self, flow: int) -> int:
+    def flow_to_sps(self, flow: Union[int, float]) -> int:
         units = self.config["flow_rate"]["units"]
+
         if flow > self.max_flow_rate:
-            warn(
-                f"{flow} > max flow rate, only pumping at {self.max_flow_rate} {units}"
-            )
+            warn(f"{flow} > max flow rate, pumping at {self.max_flow_rate} {units}")
             flow = self.max_flow_rate
+
         if flow < self.min_flow_rate:
             warn(f"{flow} < min flow rate, pumping at {self.min_flow_rate} {units}")
             flow = self.min_flow_rate
-        else:
-            return int(round(flow / 60 * self.steps / self.max_volume))
+
+        return int(round(flow / 60 * self.steps / self.max_volume))
 
     async def pump(
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: Union[float, int] = None,
-        waste_flow_rate: Union[float, int] = None,
+        pause_time: Union[float, int] = 0,
+        waste_flow_rate: Union[float, int] = 10000,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
 
@@ -454,7 +454,7 @@ class Valve(BaseValve):
     async def status(self) -> bool:
         return self._status
 
-    async def configure(self, exp_config: dict = None):
+    async def configure(self):
         """No configuration needed for valve."""
         pass
 

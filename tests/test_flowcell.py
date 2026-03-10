@@ -14,7 +14,7 @@ import asyncio
     ],
     scope="class",
 )
-async def fc(request) -> FlowCell:
+async def fc(request):
     name = request.param
     # Construct FlowCell
     if name == "B":

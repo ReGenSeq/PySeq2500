@@ -521,7 +521,7 @@ wheels = [
 [[package]]
 name = "pyseq-core"
 version = "1.1.0a0"
-source = { git = "https://github.com/ReGenSeq/pyseq_core.git#0e15aa8026ec774a2c8a9e3971fa9913ce077b35" }
+source = { editable = "../pyseq_core" }
 dependencies = [
     { name = "attrs" },
     { name = "pre-commit" },
@@ -530,6 +530,28 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruff" },
     { name = "tomlkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "attrs", specifier = ">=25.3.0" },
+    { name = "pre-commit", specifier = ">=4.2.0" },
+    { name = "pydantic", specifier = ">=2.11.7" },
+    { name = "pyserial", specifier = ">=3.5" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "ruff", specifier = ">=0.12.7" },
+    { name = "tomlkit", specifier = ">=0.13.3" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = ">=4.2.0" },
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-asyncio", specifier = ">=1.0.0" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "ruff", specifier = ">=0.12.1" },
+    { name = "ty", specifier = ">=0.0.1a13" },
 ]
 
 [[package]]
@@ -562,7 +584,7 @@ requires-dist = [
     { name = "imageio", specifier = ">=2.37.2" },
     { name = "numpy", specifier = ">=2.4.1" },
     { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pyseq-core", git = "https://github.com/ReGenSeq/pyseq_core.git" },
+    { name = "pyseq-core", editable = "../pyseq_core" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "tomlkit", specifier = ">=0.13.3" },
 ]

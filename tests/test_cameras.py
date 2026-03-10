@@ -12,6 +12,7 @@ import pytest_asyncio
 )
 async def cameras(request):
     cameras = TDICameras()
+    await cameras.connect()
     await cameras.configure()
 
     yield cameras

@@ -93,8 +93,8 @@ class FilterWheel(BaseFilter):
         """Reset the FPGA."""
         await self.home()
 
-    async def configure(self):
-        """Configure ID based on flowcell and update color dict."""
+    async def configure(self, exp_config: dict = {}):
+        """Configure ID based on flowcell."""
         self.id = 1 if self.name[0] == "G" else 2
 
     async def shutdown(self):
@@ -160,7 +160,7 @@ class EmissionFilter(BaseFilter):
         """Move filter into emission light path."""
         await self.set_filter("in")
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """No configuration needed."""
         pass
 
@@ -223,7 +223,7 @@ class Shutter(BaseShutter):
         self._open = True
         await self.close()
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """No configuration needed."""
         pass
 

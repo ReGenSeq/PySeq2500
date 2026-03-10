@@ -206,7 +206,7 @@ class TiltStage(BaseStage):
         # Update positions
         self.update_positions()
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """Configure position limits on Tilt Motor."""
         # Already implemented in pyseq_core
         pass

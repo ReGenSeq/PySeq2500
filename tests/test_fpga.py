@@ -1,10 +1,47 @@
 from pyseq2500.tiltstage import TiltStage, TiltMotor, EmulatedTiltMotor
-from pyseq2500.fpga import EmulatedFPGA
+from pyseq2500.fpga import FPGA, EmulatedFPGA
 from pyseq2500.led import LED, EmulatedLED
 from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
 from pyseq2500.zstage import ZStage, EmulatedZStage
 import pytest
 import pytest_asyncio
+
+
+# fpga is the device fixture from conftest.py
+#
+@pytest_asyncio.fixture(
+    params=[
+        pytest.param("MockFPGA", marks=pytest.mark.mock),
+        pytest.param("FPGA", marks=pytest.mark.hardware),
+    ],
+    scope="session",
+)
+async def fpga_dev(request, fpga):
+    if request.param == "MockFPGA":
+        com = EmulatedFPGA(address="FPGACOM")
+        dev = FPGA(com=com)
+    else:
+        dev = fpga
+
+    # Connect and initialize FPGA before running tests
+    await dev.connect()
+    return dev
+
+
+@pytest.mark.fpga
+@pytest.mark.stage
+@pytest.mark.asyncio
+class TestFPGA:
+    @pytest.mark.diagnostic
+    async def test_init(self, fpga_dev: FPGA):
+        await fpga_dev.initialize()
+        assert await fpga_dev.status()
+
+    @pytest.mark.diagnostic
+    async def test_write(self, fpga_dev: FPGA):
+        position = 0
+        await fpga_dev.write_position(position)
+        assert position == await fpga_dev.read_position()
 
 
 @pytest_asyncio.fixture(
@@ -143,17 +180,17 @@ async def filterwheel(request, fpga):
 @pytest.mark.asyncio
 class TestFilterWheel:
     @pytest.mark.diagnostic
-    async def test_init(self, filterwheel: filterwheel):
+    async def test_init(self, filterwheel: FilterWheel):
         await filterwheel.initialize()
         assert filterwheel.filter == "home"
 
     @pytest.mark.diagnostic
-    async def test_move(self, filterwheel: filterwheel):
+    async def test_move(self, filterwheel: FilterWheel):
         filter = "open"
         await filterwheel.set_filter(filter)
         assert filterwheel.filter == "open"
 
-    async def test_shutdown(self, filterwheel: filterwheel):
+    async def test_shutdown(self, filterwheel: FilterWheel):
         await filterwheel.shutdown()
         assert filterwheel.filter == "home"
 
@@ -230,16 +267,16 @@ async def shutter(request, fpga):
 @pytest.mark.asyncio
 class TestShutter:
     @pytest.mark.diagnostic
-    async def test_init(self, shutter: shutter):
+    async def test_init(self, shutter: Shutter):
         await shutter.initialize()
         assert not shutter.is_open
 
     @pytest.mark.diagnostic
-    async def test_open(self, shutter: shutter):
+    async def test_open(self, shutter: Shutter):
         await shutter.open()
         assert shutter.is_open
 
-    async def test_shutdown(self, shutter: shutter):
+    async def test_shutdown(self, shutter: Shutter):
         await shutter.shutdown()
         assert not shutter.is_open
 
@@ -275,15 +312,15 @@ async def led(request, fpga):
 @pytest.mark.asyncio
 class TestLED:
     @pytest.mark.diagnostic
-    async def test_init(self, led: led):
+    async def test_init(self, led: LED):
         await led.initialize()
         assert led.status
 
     @pytest.mark.diagnostic
-    async def test_set_led(self, led: led):
+    async def test_set_led(self, led: LED):
         await led.set_led("imaging")
         assert led.status
 
-    async def test_shutdown(self, led: led):
+    async def test_shutdown(self, led: LED):
         await led.shutdown()
         assert led.status

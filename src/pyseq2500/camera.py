@@ -1,7 +1,7 @@
 import logging
 from pyseq_core.base_instruments import BaseCamera
 from attrs import define, field
-from typing import Union, List
+from typing import Union, List, Literal
 from pathlib import Path
 import warnings
 import asyncio
@@ -16,17 +16,18 @@ STATUS = {0: "error", 1: "busy", 2: "ready", 3: "stable", 4: "unstable"}
 class EmulatedTDICamera:
     camera_id: int = field()
     exposure: float = field(default=1.0)
-    gain: int = field(default=1.0)
+    gain: float = field(default=1.0)
     status: int = field(default=3)
     properties: dict = field(factory=dict)
-    sensor_mode: str = field(default="TDI")
+    # sensor_mode: str = field(default="TDI")
     number_image_buffers: int = field(default=0)
     left_emission: str = field(init=False)
     right_emission: str = field(init=False)
+    sensor_mode: Literal["TDI", "AREA"] = field(default="TDI")
 
     def saveImage(self, image_name, image_path):
-        LOGGER.debug("Saving {image_path}/c{self.cam.left_emssion}_{image_name}.tiff")
-        LOGGER.debug("Saving {image_path}/c{self.cam.right_emssion}_{image_name}.tiff")
+        LOGGER.debug(f"Saving {image_path}/c{self.left_emission}_{image_name}.tiff")
+        LOGGER.debug(f"Saving {image_path}/c{self.right_emission}_{image_name}.tiff")
         return 1
 
     def setPropertyValue(self, property, value):
@@ -74,32 +75,75 @@ class EmulatedTDICamera:
         return self.number_image_buffers
 
     def getFocusStack(self) -> list:
-        return [
-            1,
-        ]
+        return [1]
 
 
-def _import_dcam():
-    """function to test import dcam
+def _import_dcam(pipe: multiprocessing.Queue):
+    """function to import dcam in seperate thread
 
     dcam has a known bug with Windows.
     It sometimes can't be initialized after a period of inactivity.
 
     import (& initialize) dcam asynchronously with a timeout using this function.
+
+    transfer dcam to main thread through pipe queue
     """
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)  # Treat UserWarning as an error
+        try:
+            from pyseq_core import dcam
+
+            pipe.put(dcam)
+        except UserWarning:
+            # DCAM not installed
+            LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
+            pipe.put(None)
 
 
 def _manage_dcam_import():
-    """Run _image_dcam in background process that times out after 60 s."""
-    p = multiprocessing.Process(target=_import_dcam)
+    """Run _import_dcam in background process that times out after 60 s."""
+    pipe = multiprocessing.Queue()
+    p = multiprocessing.Process(target=_import_dcam, args=(pipe,))
     p.start()
-    p.join(timeout=60)
+    p.join(timeout=3)
     if p.is_alive():
         p.terminate()
         p.join()
         raise TimeoutError("DCAM initialization timed out")
-        return False
-    return True
+    return pipe.get()
+
+
+@define
+class dcamCOM:
+    _connected: bool = field(default=False)
+    cams: dict[int, EmulatedTDICamera] = field(factory=dict)
+
+    @property
+    def connected(self):
+        return self._connected
+
+    async def connect(self):
+        # Import dcam in seperate process asynchronously with timeout to avoid hangs
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", category=UserWarning)
+            try:
+                loop = asyncio.get_running_loop()
+                dcam = await loop.run_in_executor(None, _manage_dcam_import)
+            except TimeoutError:
+                LOGGER.error("DCAM initialization timed out, restart computer")
+                self._connected = True
+
+        for i in range(2):
+            if i not in self.cams:
+                if dcam is None:  # pyright: ignore[reportPossiblyUnboundVariable]
+                    # Use emulation for testing off sequencer
+                    self.cams[i] = EmulatedTDICamera(i)
+                    self._connected = False
+                else:
+                    # Real camera
+                    self.cams[i] = dcam.HamamatsuCamera(i)  # pyright: ignore[reportPossiblyUnboundVariable]
+                    self._connected = True
 
 
 @define(kw_only=True)
@@ -107,18 +151,19 @@ class TDICameras(BaseCamera):
     """Wrapper around 2 instances of pyseq_core.dcam.HammatsuCamera."""
 
     name: str = field(default="Cameras")
-    _cams: dict = field(factory=dict)
+    com: dcamCOM = field(default=dcamCOM())  # pyright: ignore[reportIncompatibleVariableOverride]
+    # _cams: dict = field(factory=dict)
     _status: list = field(default=[None, None])
-    _exposure: list = field(default=[None, None])
+    _exposure: list = field(default=[None, None])  # pyright: ignore[reportIncompatibleVariableOverride]
     _gain: list = field(default=[None, None])
-    dcam_initialized: bool = field(default=True)
+    mode: Literal["TDI", "AREA"] = field(default="TDI")
 
     @property
-    def cams(self) -> dict:
-        return self._cams
+    def cams(self) -> dict[int, EmulatedTDICamera]:
+        return self.com.cams
 
     def __iter__(self):
-        for cam in self._cams.values():
+        for cam in self.com.cams.values():
             yield cam
 
     async def initialize(self):
@@ -131,35 +176,12 @@ class TDICameras(BaseCamera):
         await self.get_exposure()
         await self.get_gain()
 
-    async def configure(self):
-        """Connect to cameras and configure channel names."""
+    async def configure(self, exp_config: dict = {}):
+        """Configure channel names."""
 
-        # Import dcam in seperate process asynchronously with timeout to avoid hangs
-        with warnings.catch_warnings():
-            warnings.filterwarnings("error", category=UserWarning)
-            try:
-                loop = asyncio.get_running_loop()
-                self.dcam_initialized = True
-                dcam_found = await loop.run_in_executor(None, _manage_dcam_import)
-            except TimeoutError:
-                LOGGER.error("DCAM initialization timed out, restart computer")
-                self.dcam_initialized = False
-                dcam_found = False
-            except UserWarning:
-                dcam_found = False
-
-        for i in range(2):
-            if i not in self.cams:
-                if dcam_found:
-                    # Need to reimport because test import is in different memory space
-                    from pyseq_core.dcam import HamamatsuCamera
-
-                    self.cams[i] = HamamatsuCamera(i)
-                else:
-                    self.cams[i] = EmulatedTDICamera(i)
-
-        for cam in self:
-            if self.config["save_nt"]:
+        for cam in self.cams.values():
+            LOGGER.debug(f"configuring camera {cam.camera_id}")
+            if exp_config.get("cameras", {}).get("save_nt", False):
                 cam.left_emission = self.config[cam.camera_id]["nucleotides"][0]
                 cam.right_emission = self.config[cam.camera_id]["nucleotides"][1]
             else:
@@ -171,22 +193,24 @@ class TDICameras(BaseCamera):
         for cam in list(self.cams.keys()):
             self.cams[cam].shutdown()
             del self.cams[cam]
+        self.com._connected = False
 
-    async def status(self) -> List[str]:
+    async def status(self) -> bool:
         """Get status from cameras"""
-        if self.dcam_initialized:
+        if self.com._connected:
             for i, cam in enumerate(self):
                 self._status[i] = STATUS[cam.get_status()]
-            return self._status
-        return [False, False]
+            return all(self._status)
+        return False
 
-    async def save_image(self, image_name: str, image_path: Union[str, Path]) -> int:
-        """Save images to image_path/channel_image_name.tiff and return number of bytes saved."""
+    async def save_image(self, image_name: str, image_dir: Union[str, Path]) -> int:
+        """Save images to image_dir/channel_image_name.tiff and return number of bytes saved."""
         nbytes = 0
         for cam in self:
-            nbytes += cam.saveImage(image_name, image_path)
+            nbytes += cam.saveImage(image_name, image_dir)
+        return nbytes
 
-    async def set_exposure(self, time: float) -> float:
+    async def set_exposure(self, time: float) -> List[float]:
         """Sets the exposure time (s) for the camera.
 
         The definition for exposure changes between TDI and AREA mode:
@@ -206,12 +230,13 @@ class TDICameras(BaseCamera):
         Returns:
             float: The set exposure time in seconds.
         """
-        for i, cam in enumerate(self):
-            time = cam.setPropertyValue("exposure_time", time / 1000)
+        for i, cam in self.cams.items():
+            cam.setPropertyValue("exposure_time", time / 1000)
+            time = cam.getPropertyValue("exposure_time")
             self._exposure[i] = time * 1000
         return self._exposure
 
-    async def get_exposure(self) -> float:
+    async def get_exposure(self) -> List[float]:
         """Retrieves the current exposure time (s) sfrom the camera.
 
         Returns:
@@ -258,17 +283,54 @@ class TDICameras(BaseCamera):
         """
         raise NotImplementedError
 
+    async def check_free(self):
+        await self.status()
+        while not all(self._status):
+            for cam_id, status in enumerate(self._status):
+                if not status:
+                    self.cams[cam_id].stopAcquisition()
+                    self.cams[cam_id].freeFrames()
+                    self.cams[cam_id].captureSetup()
+                    self._status[cam_id] = self.cams[cam_id].get_status()
+
+    async def allocate(self, mode: Literal["TDI", "AREA"], n_frames: int):
+        # Set mode
+        if mode == "TDI":
+            await self.setTDI()
+        elif mode == "AREA":
+            await self.setAREA()
+        else:
+            raise ValueError(f"Unknown mode {mode}. Must be TDI or AREA")
+
+        # Allocate memory for image data
+        for cam in self:
+            cam.allocFrame(n_frames)
+
     async def setTDI(self):
         """Put cameras into TDI mode."""
-        for cam in self:
-            cam.setTDI()
+        if self.mode != "TDI":
+            for cam in self:
+                cam.setTDI()
+                cam.captureSetup()
+            self.mode = "TDI"
 
     async def setAREA(self):
         """Put cameras into AREA mode."""
-        for cam in self:
-            cam.setAREA()
+        if self.mode != "AREA":
+            for cam in self:
+                cam.setAREA()
+                cam.captureSetup()
+            self.mode = "AREA"
 
     async def captureSetup(self):
         """Configure cameras for capturing new images"""
         for cam in self:
             cam.captureSetup()
+
+    async def startAcquisition(self):
+        for cam in self:
+            cam.startAcquisition()
+
+    async def stopAcquisition(self):
+        for cam in self:
+            cam.stopAcquisition()

@@ -8,20 +8,20 @@ import asyncio
 @pytest_asyncio.fixture(
     params=[
         pytest.param("MockLaser", marks=pytest.mark.mock),
-        pytest.param("greenLaser", marks=pytest.mark.hardware),
-        pytest.param("redLaser", marks=pytest.mark.hardware),
+        pytest.param("GreenLaser", marks=pytest.mark.hardware),
+        pytest.param("RedLaser", marks=pytest.mark.hardware),
     ],
     scope="class",
 )
-async def laser(request) -> Laser:
+async def laser(request):
     name = request.param
 
     if name == "MockLaser":
-        com = EmulatedLaser(name="greenLaser", address="LaserCOM")
+        com = EmulatedLaser(name="GreenLaser", address="LaserCOM")
     else:
         com = COM_DICT[request.param]
 
-    color = "red" if "red" in name else "green"
+    color = "red" if "red" in name.lower() else "green"
     laser = Laser(name=com.name, com=com, color=color)
 
     # Connect to COM

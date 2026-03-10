@@ -97,7 +97,7 @@ class ZStage(BaseStage):
         await self.get_position()
         await self.set_velocity(self.max_velocity)
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """Configure focus on Tilt Motor."""
         pass
 
