@@ -4,6 +4,7 @@ from pyseq2500.com import EmulatedSerialCOM, SerialCOM
 from attrs import define, field
 import re
 import asyncio
+from typing import Union
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -137,7 +138,7 @@ class YStage(BaseStage):
 
     name: str = field(default="YStage")
     _mode: str = field(default="")
-    com: SerialCOM = field(default=None)  # pyright: ignore[reportIncompatibleVariableOverride]
+    com: Union[SerialCOM, EmulatedSerialCOM] = field(default=None)  # pyright: ignore[reportIncompatibleVariableOverride]
 
     @property
     def home_position(self):

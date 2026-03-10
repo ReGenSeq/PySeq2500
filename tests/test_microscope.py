@@ -21,7 +21,7 @@ import asyncio
     ],
     scope="class",
 )
-async def microscope(request, fpga):
+async def microscope(request):
     name = request.param
     # Construct Microscope
     m = Microscope()
@@ -91,6 +91,13 @@ class TestMicroscope:
         await microscope._initialize()
         await microscope._configure({})
 
+        for instrument in microscope.instruments.values():
+            if (
+                not microscope.name == "MockMicroscope"
+                and not instrument.name == "Cameras"
+            ):
+                assert instrument.connected
+
     async def test_move(self, microscope: Microscope, fc_A_roi):
         x = fc_A_roi.stage.x_init
         y = fc_A_roi.stage.y_init
@@ -98,7 +105,16 @@ class TestMicroscope:
         t1 = fc_A_roi.stage.tilt1
         t2 = fc_A_roi.stage.tilt2
         t3 = fc_A_roi.stage.tilt3
+
         await microscope._move(x, y, z, t1, t2, t3)
+
+        status = await asyncio.gather(
+            microscope.XStage.status(),
+            microscope.YStage.status(),
+            microscope.ZStage.status(),
+            microscope.TiltStage.status(),
+        )
+        assert all(status)
 
     async def test_scan(self, microscope: Microscope, fc_A_roi):
         await microscope._scan(fc_A_roi)

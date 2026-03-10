@@ -106,7 +106,7 @@ def _manage_dcam_import():
     pipe = multiprocessing.Queue()
     p = multiprocessing.Process(target=_import_dcam, args=(pipe,))
     p.start()
-    p.join(timeout=3)
+    p.join(timeout=60)
     if p.is_alive():
         p.terminate()
         p.join()
