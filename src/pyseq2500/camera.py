@@ -3,9 +3,8 @@ from pyseq_core.base_instruments import BaseCamera
 from attrs import define, field
 from typing import Union, List, Literal
 from pathlib import Path
-import warnings
-import asyncio
-import multiprocessing
+import ctypes
+from pyseq_core.dcam import DCAMException
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -78,72 +77,104 @@ class EmulatedTDICamera:
         return [1]
 
 
-def _import_dcam(pipe: multiprocessing.Queue):
-    """function to import dcam in seperate thread
+# def _import_dcam(pipe: multiprocessing.Queue):
+##def _import_dcam():
+##    """function to import dcam in seperate thread
+##
+##    dcam has a known bug with Windows.
+##    It sometimes can't be initialized after a period of inactivity.
+##
+##    import (& initialize) dcam asynchronously with a timeout using this function.
+##
+##    transfer dcam to main thread through pipe queue
+##    """
+##
+##    with warnings.catch_warnings():
+##        warnings.simplefilter("error", UserWarning)  # Treat UserWarning as an error
+##        try:
+##            from pyseq_core import dcam
+##
+##            #pipe.put(dcam)
+##        except UserWarning:
+##            # DCAM not installed
+##            LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
+##        except DCAMException:
+##            LOGGER.warning("DCAM failed, restart system")
+##            #pipe.put(None)
 
-    dcam has a known bug with Windows.
-    It sometimes can't be initialized after a period of inactivity.
 
-    import (& initialize) dcam asynchronously with a timeout using this function.
-
-    transfer dcam to main thread through pipe queue
-    """
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", UserWarning)  # Treat UserWarning as an error
-        try:
-            from pyseq_core import dcam
-
-            pipe.put(dcam)
-        except UserWarning:
-            # DCAM not installed
-            LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
-            pipe.put(None)
-
-
-def _manage_dcam_import():
-    """Run _import_dcam in background process that times out after 60 s."""
-    pipe = multiprocessing.Queue()
-    p = multiprocessing.Process(target=_import_dcam, args=(pipe,))
-    p.start()
-    p.join(timeout=60)
-    if p.is_alive():
-        p.terminate()
-        p.join()
-        raise TimeoutError("DCAM initialization timed out")
-    return pipe.get()
+##def _manage_dcam_import():
+##    """Run _import_dcam in background process that times out after 60 s."""
+##    pipe = multiprocessing.Queue()
+##    p = multiprocessing.Process(target=_import_dcam, args=(pipe,))
+##    p.start()
+##    p.join(timeout=60)
+##    if p.is_alive():
+##        p.terminate()
+##        p.join()
+##        raise TimeoutError("DCAM initialization timed out")
+##    return pipe.get()
 
 
 @define
 class dcamCOM:
     _connected: bool = field(default=False)
     cams: dict[int, EmulatedTDICamera] = field(factory=dict)
+    emulated: bool = field(default=False)
 
     @property
     def connected(self):
         return self._connected
 
     async def connect(self):
-        # Import dcam in seperate process asynchronously with timeout to avoid hangs
-        with warnings.catch_warnings():
-            warnings.filterwarnings("error", category=UserWarning)
+        ##        # Import dcam in seperate process asynchronously with timeout to avoid hangs
+        ##        with warnings.catch_warnings():
+        ##            warnings.filterwarnings("error", category=UserWarning)
+        ##            try:
+        ##                loop = asyncio.get_running_loop()
+        ##                dcam = await loop.run_in_executor(None, _manage_dcam_import)
+        ##            except TimeoutError:
+        ##                LOGGER.error("DCAM initialization timed out, restart computer")
+        ##                self._connected = True
+        if not self.emulated:
             try:
-                loop = asyncio.get_running_loop()
-                dcam = await loop.run_in_executor(None, _manage_dcam_import)
-            except TimeoutError:
-                LOGGER.error("DCAM initialization timed out, restart computer")
-                self._connected = True
+                self.emulated = False
+                from pyseq_core.dcam import HamamatsuCamera
 
-        for i in range(2):
-            if i not in self.cams:
-                if dcam is None:  # pyright: ignore[reportPossiblyUnboundVariable]
-                    # Use emulation for testing off sequencer
-                    self.cams[i] = EmulatedTDICamera(i)
-                    self._connected = False
-                else:
-                    # Real camera
-                    self.cams[i] = dcam.HamamatsuCamera(i)  # pyright: ignore[reportPossiblyUnboundVariable]
-                    self._connected = True
+                dcam = ctypes.windll.dcamapi
+                temp = ctypes.c_int32(0)
+                if dcam.dcam_init(None, ctypes.byref(temp), None) != 1:
+                    raise DCAMException("DCAM initialization failed.")
+                n_cameras = temp.value
+                LOGGER.debug(f"DCAM found {n_cameras} cameras")
+            except AttributeError as e:
+                LOGGER.error(e)
+                LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
+                self.emulated = True
+            except DCAMException as e:
+                LOGGER.error(e)
+                LOGGER.error("DCAM failed, restart system")
+                self.emulated = True
+
+        try:
+            for i in range(2):
+                if i not in self.cams:
+                    ##                if dcam is None:  # pyright: ignore[reportPossiblyUnboundVariable]
+                    ##                    # Use emulation for testing off sequencer
+                    ##                    self.cams[i] = EmulatedTDICamera(i)
+                    ##                    self._connected = False
+                    ##                else:
+                    ##                    # Real camera
+                    if self.emulated:
+                        self.cams[i] = EmulatedTDICamera(i)
+                        LOGGER.debug(f"Camera {i} connected to CAM{i}")
+                    else:
+                        self.cams[i] = HamamatsuCamera(i)
+                        LOGGER.debug(f"Camera {i} connected to dcam {i}")
+            self._connected = True
+        except DCAMException as e:
+            LOGGER.error(e)
+            LOGGER.error(f"DCAM could not connect to Camera {i}")
 
 
 @define(kw_only=True)
@@ -334,3 +365,15 @@ class TDICameras(BaseCamera):
     async def stopAcquisition(self):
         for cam in self:
             cam.stopAcquisition()
+
+    async def freeFrames(self):
+        for cam in self:
+            cam.freeFrames()
+
+    async def getFrameCount(self):
+        nframes = [0, 0]
+        for cam in self:
+            camid = cam.camera_id
+            nframes[camid] += cam.getFrameCount()
+            LOGGER.debug(f"Camera{camid}:: Took {nframes[camid]} frames")
+        return (nframes[0] + nframes[1]) / 2

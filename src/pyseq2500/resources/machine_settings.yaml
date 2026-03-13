@@ -15,6 +15,29 @@ Test:                                                                           
       8: 5
   Microscope:
     resolution: 0.375                                                           # um/px
+  Cameras:
+    sensor_width: 2048                                                          # width of TDI line sensor in pixels
+    exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
+      min_val: 0.00002
+      max_val: 1.004
+      units: s
+    gain:                                                       
+      min_val: 0
+      max_val: 15
+      units: X
+    save_nt: False                                                              # save images with nucleotide name instead of emission wavelength
+    TDI: 
+      sensor_mode_line_bundle_height: &y_step 128
+    AREA: 
+      sensor_mode_line_bundle_height: 64
+    0:                                                                          # Camera ID 0 properties
+      nucleotides: "AG"
+      left_emission: 687                                                          # A
+      right_emission: 558                                                         # G
+    1:                                                                          # Camera ID 1 properties                   
+      nucleotides: "TC"  
+      left_emission: 610                                                          # T
+      right_emission: 740                                                         # C
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600
@@ -87,11 +110,11 @@ Test:                                                                           
       baudrate: 9600
       timeout: 1
       address: IL000002A
-      prefix: ""
+      prefix: "1"
       suffix: "\r\n"   
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     origin: -180000                                                            # reference step for flow cells, used in `custom_roi_factory`
-    step: 128                                                                   # line bundle height for TDI imaging
+    step: *y_step                                                                   # line bundle height for TDI imaging
     position:
       min_val: -7000000
       max_val: 7000000
@@ -107,8 +130,8 @@ Test:                                                                           
     com: &fpgacom
       baudrate: 115200
       timeout: 1
-      address: IL000005A
-      rx_address: IL000004A
+      address: IL000004A
+      rx_address: IL000005A
       prefix: ""
       suffix: "\n"  
   TiltStage: &tiltstage
@@ -182,30 +205,7 @@ Test:                                                                           
     com:
       <<: *fpgacom
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
-      valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}
-  Cameras:
-    sensor_width: 2048                                                          # width of TDI line sensor in pixels
-    exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
-      min_val: 0.00002
-      max_val: 1.004
-      units: s
-    gain: &camera_gain                                                          # &camera_exposure anchor for future reference
-      min_val: 0
-      max_val: 15
-      units: X
-    save_nt: False                                                              # save images with nucleotide name instead of emission wavelength
-    TDI: 
-      sensor_mode_line_bundle_height: 128
-    AREA: 
-      sensor_mode_line_bundle_height: 64
-    0:                                                                          # Camera ID 0 properties
-      nucleotides: "AG"
-      left_emission: 687                                                          # A
-      right_emission: 558                                                         # G
-    1:                                                                          # Camera ID 1 properties                   
-      nucleotides: "TC"  
-      left_emission: 610                                                          # T
-      right_emission: 740                                                         # C          
+      valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}          
 # Extra validation parameters for stage beyond X, Y, Z 
 # Should align with stage table in default.toml
   stage: 

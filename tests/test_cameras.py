@@ -1,4 +1,4 @@
-from pyseq2500.camera import TDICameras
+from pyseq2500.camera import TDICameras, dcamCOM
 import pytest
 import pytest_asyncio
 
@@ -11,7 +11,11 @@ import pytest_asyncio
     scope="class",
 )
 async def cameras(request):
-    cameras = TDICameras()
+    if request.param == "MockCamera":
+        cameras = TDICameras(com=dcamCOM(emulated=True))
+    else:
+        cameras = TDICameras()
+
     await cameras.connect()
     await cameras.configure()
 

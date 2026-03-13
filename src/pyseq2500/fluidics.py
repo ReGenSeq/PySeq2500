@@ -298,7 +298,7 @@ class Pump(BasePump):
 
 @define(kw_only=True)
 class EmulatedPump(EmulatedSerialCOM):
-    id: int = field(default=1)
+    # id: int = field(default=1)
     valve: str = field(default="I")
     position: int = field(default=0)
     ready: str = field(default="`")
@@ -339,7 +339,7 @@ class EmulatedPump(EmulatedSerialCOM):
                 response = ""
 
             if read:
-                response = f"{self.prefix}{self.id}{response}{self.suffix}"
+                response = f"{self.prefix}{response}{self.suffix}"
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
 
@@ -474,13 +474,13 @@ class Valve(BaseValve):
 
         async with asyncio.timeout(timeout):
             while self.port != port:
-                await self.command(f"GO{port}")
+                await self.command(f"GO{port}", read=False)
                 position = await self.current_port()
                 if position != port:
                     self._status = False
         self._status = True
 
-    async def current_port(self) -> Union[str, int]:
+    async def current_port(self) -> int:
         """Read the current active port from the valve.
 
         This method should be implemented by subclasses to query the physical
@@ -511,7 +511,7 @@ class EmulatedValve(EmulatedSerialCOM):
 
     @n_ports.default
     def get_n_ports(self):
-        match = re.search(re.compile(r"VALVE(\d+)"), self.name)
+        match = re.search(re.compile(r"Valve(\d+)"), self.name)
         if match:
             return int(match.groups()[0])
         else:

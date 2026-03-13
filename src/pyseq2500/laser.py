@@ -109,7 +109,9 @@ class Laser(BaseLaser):
 
     async def initialize(self):
         """Turn laser on and set to low power."""
-        await self.command("VERSION?", read=2)  # Get firmware version
+        await self.command("VERSION?")  # Get firmware version
+        if self.color == "green":
+            await self.com.read()  # Need to read extra line for green laser
         await self.status()  # Get initial status
         await self.get_power()  # Get initial power
 
@@ -132,7 +134,7 @@ class Laser(BaseLaser):
         self._status = "ENABLED" == status.strip()
         if self._status:
             await self.get_power()
-            return self._power > 0
+            return self._power >= 0
         else:
             return False
 

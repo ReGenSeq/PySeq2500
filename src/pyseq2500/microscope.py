@@ -15,9 +15,10 @@ from pyseq2500.utils import DEFAULT_CONFIG
 import logging
 import asyncio
 from attrs import define, field
-from typing import Type, Union, Literal
+from typing import Type, Union, Literal, Optional
 from math import ceil
 from functools import cached_property
+from pathlib import Path
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -101,41 +102,45 @@ class Microscope(BaseMicroscope):
     @check_name
     async def _capture(
         self,
-        roi: ROIType = None,
+        roi: Optional[ROIType] = None,
         name: str = "",
-        y_init: int = None,
-        y_last: int = -1,
+        y_init: Optional[int] = None,
+        y_last: Optional[int] = None,
         n_frames: int = 0,
+        reset_y: bool = False,
+        image_dir: Union[str, Path] = ".",
         **kwargs,
     ):
         """Capture an image and save it to filename."""
 
-        # Check parameters
+        # Check parameters, roi, n_frames, or y_last must be specified
         # Specified parameters can override parameters stored in roi
         # If parameters not specified or not in roi default to config or current positions
 
-        if y_init is None and roi is not None:
+        # Check if minimal args exist
+        if y_last is None and n_frames == 0 and roi is None:
+            raise ValueError("Must specify y_last or n_frames")
+
+        # Get ROI (preferred)
+        if n_frames == 0 and y_last is None and roi is not None:
             y_init = roi.stage.y_init
-        elif y_init is None:
+            y_last = roi.stage.y_last - 300000
+            n_frames = roi.stage.n_frames
+            image_dir = roi.image.image_dir
+
+        # Get y_init
+        if y_init is None:
             y_init = self.YStage.position
+            if y_last is not None and y_init < y_last:
+                raise ValueError("y_last must be < y_init")
 
-        height = self.YStage.config["step"]
-        if n_frames == 0 and roi is not None:
-            n_frames = roi.stage.ny
-        elif n_frames == 0 and y_last < y_init:
+        # Fall back to n_frames or y_last
+        height = self.Camera.config["TDI"]["sensor_mode_line_bundle_height"]
+        if n_frames == 0 and y_last is not None:
             n_frames = ceil(y_init - y_last) / height
-        else:
-            raise ValueError("Number of frames, n_frames, must be > 0.")
-
+        elif n_frames > 0 and y_last is None:
+            y_last = y_init - n_frames * height - 300000
         n_triggers = n_frames * height
-        if roi is not None:
-            image_dir = roi.image.output
-            y_last = roi.stage.y_last
-        else:
-            image_dir = DEFAULT_CONFIG["experiment"]["output_path"]
-            # Recalculate y_last from y_init based on number of frames
-            y_delta = n_triggers * self.resolution * self.YStage.spum
-            y_last = int(y_init - y_delta - 300000)
 
         # Check Cameras and sync YStage with FPGA
         await asyncio.gather(
@@ -144,11 +149,10 @@ class Microscope(BaseMicroscope):
         )
         # Allocate memory and set TDI triggering
         await asyncio.gather(
-            self.Camera.allocate("TDI", n_frames), self.FPGA.TDIARM(y_init, n_triggers)
+            self.Camera.allocate("TDI", n_frames),
+            self.FPGA.TDIARM(y_init, n_triggers),
+            self.YStage.set_mode("imaging"),
         )
-
-        # Arm Camera triggers
-        await self.FPGA.TDIARM(n_triggers, y_init)
 
         # Start Imaging
         await self.Camera.startAcquisition()  # Start cameras
@@ -160,9 +164,16 @@ class Microscope(BaseMicroscope):
         await self.Camera.stopAcquisition()  # Stop cameras
 
         # Save Images
-        nbytes = await self.Camera.save_image(name, image_dir)  # Stop cameras
+        frame_count = await self.Camera.getFrameCount()  # Stop cameras
+        await self.Camera.save_image(name, image_dir)  # Stop cameras
 
-        return nbytes
+        # Reset for next image
+        _ = [self.YStage.set_mode("moving"), self.Camera.freeFrames()]
+        if reset_y:
+            _.append(self.YStage.move(y_init))
+        await asyncio.gather(*_)
+
+        return frame_count == n_frames
 
     @check_name
     async def _z_stack(
@@ -180,7 +191,7 @@ class Microscope(BaseMicroscope):
             z_init = roi.stage.z_init
 
         if z_last == -1 and roi is not None:
-            z_last = roi.stage.z_init
+            z_last = roi.stage.z_last
 
         if z_step == 0 and roi is not None:
             z_step = roi.stage.z_step
@@ -191,9 +202,12 @@ class Microscope(BaseMicroscope):
             raise ValueError("Specify initial and last Z stage position.")
 
         # Loop over z stack
-        for z in range(roi.stage.z_init, roi.stage.z_last, roi.stage.z_step):
+        z_pos = range(roi.stage.z_init, z_last, z_step)
+        nz = len(z_pos)
+        for i, z in enumerate(z_pos):
             await self.ZStage.move(z)
-            await self._capture(roi, name=f"{name}_z{z}")
+            reset_y = i < nz - 1
+            await self._capture(roi, name=f"{name}_z{z}", reset_y=reset_y, **kwargs)
 
     @check_name
     async def _scan(self, roi: ROIType = None, name: str = "", **kwargs):
@@ -204,10 +218,12 @@ class Microscope(BaseMicroscope):
             # Move to initial position
             y_init = roi.stage.y_init
             x_init = roi.stage.x_init
+            x_last = roi.stage.x_last
+            x_step = roi.stage.x_step
             await self._move(x=x_init, y=y_init)
 
         # Loop over x tiles
-        _x = range(x_init, roi.stage.x_last, roi.stage.x_step)
+        _x = range(x_init, x_last, x_step)
         nx = len(_x)
         for i, x in enumerate(_x):
             LOGGER.info(f"Scanning {roi.name} tile {i + 1}/{nx}")

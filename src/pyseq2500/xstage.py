@@ -162,6 +162,7 @@ class XStage(BaseStage):
         while not homed:
             await self.com.write("EX 1")
             while not await self.status():
+                await asyncio.sleep(2)
                 # Wait until stage stops moving
                 pass
             # Check if home input changes
@@ -188,7 +189,7 @@ class XStage(BaseStage):
         """
         response = await self.command("PR MV")
         ready = not bool(int(response))
-
+        await asyncio.sleep(0.5)
         await self.get_position()
 
         return ready
@@ -201,6 +202,7 @@ class XStage(BaseStage):
         if position != self.position:
             while position != await self.get_position():
                 await self.command(f"MA {position}", read=False)
+                await asyncio.sleep(1)
                 while await self.status():
                     await asyncio.sleep(1)
 

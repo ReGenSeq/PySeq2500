@@ -10,7 +10,7 @@ LOGGER = logging.getLogger("PySeq")
 
 @define
 class FlowCell(BaseFlowCell):
-    _inlet: int = field(init=False)
+    _inlet: int = field(default=2)
     instruments: dict = field(init=False)  # pyright ignore[reportGeneralTypeIssues]
 
     @property
@@ -46,6 +46,8 @@ class FlowCell(BaseFlowCell):
 
     async def _select_inlet(self, inlet: Literal[2, 8]):
         port = self._config["inlet_port"][inlet]
+        if not hasattr(self.InletValve, "_port"):
+            await self.InletValve.current_port()
         await self.InletValve.select(port)
         self._inlet = inlet
 
@@ -55,6 +57,4 @@ class FlowCell(BaseFlowCell):
         # Update pump limits
         await self.Pump.configure()
         # Set 2 or 8 port inlet
-        inlet = exp_config["flowcell"]["inlet"]
-        await self._select_inlet(inlet)
-        self._inlet = inlet
+        await self._select_inlet(exp_config["flowcell"]["inlet"])

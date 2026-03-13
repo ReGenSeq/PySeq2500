@@ -113,7 +113,7 @@ class FPGA(BaseInstrument):
         return self._status
 
     async def reset(self) -> bool:
-        response = await self.command("RESET", read=2, delay=2)
+        response = await self.command("RESET", read=2, delay=1)
         self._status = response.strip() == "RESET"
 
     async def read_position(self) -> int:

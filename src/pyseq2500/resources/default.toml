@@ -24,7 +24,8 @@ protocol_path = ""                                                              
 [image]
 # Table for imaging parameters
 nz = 0                                                                          # Number of z planes to image, overrides nz in protocols
-overlap = 0                                                                     # Overlap in mircons between tiles along x direction 
+overlap = 0                                                                     # Overlap in microns between tiles along x direction 
+
 [image.optics]
 # Table for imaging optical parameters
 # See `optics` table for options

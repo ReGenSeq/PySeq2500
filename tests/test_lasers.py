@@ -3,54 +3,88 @@ from pyseq2500.laser import Laser, EmulatedLaser
 import pytest
 import pytest_asyncio
 import asyncio
+from typing import List
 
 
 @pytest_asyncio.fixture(
     params=[
         pytest.param("MockLaser", marks=pytest.mark.mock),
-        pytest.param("GreenLaser", marks=pytest.mark.hardware),
-        pytest.param("RedLaser", marks=pytest.mark.hardware),
+        pytest.param("Laser", marks=pytest.mark.hardware),
+        # pytest.param("RedLaser", marks=pytest.mark.hardware),
     ],
     scope="class",
 )
-async def laser(request):
+async def lasers(request) -> List[Laser]:
     name = request.param
 
-    if name == "MockLaser":
-        com = EmulatedLaser(name="GreenLaser", address="LaserCOM")
-    else:
-        com = COM_DICT[request.param]
+    lasers = []
+    for c in ["Red", "Green"]:
+        name = f"{c}Laser"
+        if name == "MockLaser":
+            com = EmulatedLaser(name=name, address="LaserCOM")
+        else:
+            com = COM_DICT[name]
 
-    color = "red" if "red" in name.lower() else "green"
-    laser = Laser(name=com.name, com=com, color=color)
+        lasers.append(Laser(name=com.name, com=com, color=c.lower()))
+
+    yield lasers
 
     # Connect to COM
-    await laser.com.connect()
-    assert laser.connected
 
-    yield laser
-
-    await laser.shutdown()
+    _ = []
+    for laser in lasers:
+        _.append(laser.shutdown())
+    await asyncio.gather(*_)
 
 
 @pytest.mark.optical
 @pytest.mark.asyncio
 @pytest.mark.diagnostic
 class TestLaser:
-    async def test_init(self, laser: Laser):
-        await laser.initialize()
+    async def test_init(self, lasers: List[Laser]):
+        _ = []
+        for laser in lasers:
+            _.append(laser.connect())
+        await asyncio.gather(*_)
 
-    async def test_power(self, laser: Laser):
+        _ = []
+        for laser in lasers:
+            assert laser.connected
+            _.append(laser.initialize())
+        await asyncio.gather(*_)
+
+    async def test_power(self, lasers: List[Laser]):
         # Test is laser power gets within 5 %
+
         set_power = 50
-        await laser.set_power(set_power)
-        await asyncio.sleep(set_power / 10)
-        act_power = await laser.get_power()
-        assert 0.05 > abs(act_power / set_power - 1)
+        _ = []
+        for laser in lasers:
+            _.append(laser.set_power(set_power))
+        await asyncio.gather(*_)
 
-    async def test_status(self, laser: Laser):
-        assert await laser.status()
+        powered_on = [False, False]
+        try:
+            async with asyncio.timeout(set_power):
+                while all(powered_on):
+                    for i, laser in enumerate(lasers):
+                        act_power = await laser.get_power()
+                        if 0.05 > abs(act_power / set_power - 1):
+                            powered_on[i] = True
+                            assert True
+                        else:
+                            await asyncio.sleep(0.5)
+        except asyncio.TimeoutError:
+            assert False
 
-    async def test_shutdown(self, laser: Laser):
-        await laser.shutdown()
-        assert not await laser.status()
+    async def test_status(self, lasers: List[Laser]):
+        for laser in lasers:
+            assert await laser.status()
+
+    async def test_shutdown(self, lasers: List[Laser]):
+        _ = []
+        for laser in lasers:
+            _.append(laser.shutdown())
+        await asyncio.gather(*_)
+
+        for laser in lasers:
+            assert not await laser.status()

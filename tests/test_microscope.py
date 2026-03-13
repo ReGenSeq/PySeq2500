@@ -6,12 +6,14 @@ from pyseq2500.tiltstage import EmulatedTiltMotor, TiltStage, TiltMotor
 from pyseq2500.fpga import EmulatedFPGA, FPGA
 from pyseq2500.laser import EmulatedLaser, Laser
 from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
-from pyseq2500.camera import TDICameras
+from pyseq2500.camera import TDICameras, dcamCOM
 
 # from pyseq2500.utils import DEFAULT_CONFIG
 import pytest
 import pytest_asyncio
 import asyncio
+from pathlib import Path
+from unittest.mock import patch
 
 
 @pytest_asyncio.fixture(
@@ -21,10 +23,10 @@ import asyncio
     ],
     scope="class",
 )
-async def microscope(request):
+async def microscope(request, fpga):
     name = request.param
     # Construct Microscope
-    m = Microscope()
+    m = Microscope(name=name)
     if name == "MockMicroscope":
         fcom = EmulatedFPGA(address="FPGACOM")
         xcom = EmulatedXStage(name="XStage", address="XStageCOM")
@@ -37,6 +39,7 @@ async def microscope(request):
         rfwcom = EmulatedOptics(name="RedFilterWheel", address="FPGA")
         ecom = EmulatedOptics(name="EmissionFilter", address="FPGA")
         scom = EmulatedOptics(name="Shutter", address="FPGA")
+        dcam = dcamCOM(emulated=True)
 
         instruments = {
             "FPGA": FPGA(com=fcom),
@@ -50,7 +53,7 @@ async def microscope(request):
             "RedFilterWheel": FilterWheel(name="RedFilterWheel", com=rfwcom),
             "EmissionFilter": EmissionFilter(name="EmissionFilter", com=ecom),
             "Shutter": Shutter(name="Shutter", com=scom),
-            "Camera": TDICameras(),
+            "Camera": TDICameras(com=dcam),
         }
 
         # Emulated coms for 3 motors
@@ -65,11 +68,25 @@ async def microscope(request):
             )
 
         m.instruments = instruments
+    else:
+        # Attach fpga com fixture
+        fpga_instruments = [
+            "FPGA",
+            "ZStage",
+            "TiltStage",
+            "GreenFilterWheel",
+            "RedFilterWheel",
+            "EmissionFilter",
+            "Shutter",
+        ]
+        for fi in fpga_instruments:
+            m.instruments[fi].com = fpga
 
     # Start async worker
     m.start()
 
     await m._configure({})
+    await m._connect()
 
     # Do tests
     yield m
@@ -91,12 +108,19 @@ class TestMicroscope:
         await microscope._initialize()
         await microscope._configure({})
 
+        _ = []
         for instrument in microscope.instruments.values():
-            if (
-                not microscope.name == "MockMicroscope"
-                and not instrument.name == "Cameras"
-            ):
-                assert instrument.connected
+            if "Laser" in instrument.name:
+                # Lasers not used so just test if connected
+                status = instrument.connected
+            elif "Shutter" in instrument.name:
+                # Shutter is closed so status should read False
+                status = not await instrument.status()
+            else:
+                status = await instrument.status()
+            if not status:
+                print(f"{instrument.name} failed to start")
+            assert status
 
     async def test_move(self, microscope: Microscope, fc_A_roi):
         x = fc_A_roi.stage.x_init
@@ -117,4 +141,20 @@ class TestMicroscope:
         assert all(status)
 
     async def test_scan(self, microscope: Microscope, fc_A_roi):
-        await microscope._scan(fc_A_roi)
+        x = fc_A_roi.stage.x_init
+        z = fc_A_roi.stage.z_init
+        name = fc_A_roi.name
+        im_name = f"s{name}_x{x}_z{z}"
+        image_dir = Path(fc_A_roi.image.image_dir)
+
+        if microscope.name == "MockMicroscope":
+            with patch.object(microscope.Camera, "save_image") as mock_save_image:
+                await microscope._scan(fc_A_roi)
+                mock_save_image.assert_called_once()
+                args, kwargs = mock_save_image.call_args
+                assert args[0] == im_name
+                assert args[1] == image_dir
+        else:
+            await microscope._scan(fc_A_roi)
+            written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
+            assert len(written_files) == 4

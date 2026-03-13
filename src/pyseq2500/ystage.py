@@ -33,7 +33,7 @@ class EmulatedYStage(EmulatedSerialCOM):
     gains_pattern: re.Pattern = field(default=re.compile(r"GAINS(?:\(([\d.,]+)\))?"))
     v_pattern: re.Pattern = field(default=re.compile(r"V(\d*\.?\d*)"))
 
-    async def command(self, command: str, read: bool = True) -> str:
+    async def command(self, command: str, read: bool = True, delay: float = 0.0) -> str:
         """
         Asynchronously emulate sending commands and receiving response from YStage.
 
@@ -71,6 +71,7 @@ class EmulatedYStage(EmulatedSerialCOM):
                 response = ""
 
             if read:
+                await asyncio.sleep(delay / 100)
                 response = f"{response}{self.suffix}"
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
@@ -145,12 +146,7 @@ class YStage(BaseStage):
         return 0
 
     async def initialize(self):
-        await self.command("Z", read=False)  # Initialize/Reset Stage
-        await asyncio.sleep(2)  # Wait 2 s for stage to reset
-        await self.com.read()  # read driver name
-        await self.com.read()  # read driver version
-        await self.com.read()  # read copyright
-        await self.com.read()  # read new line
+        await self.command("Z", read=4, delay=2)  # Initialize/Reset Stage
         await self.command("W(EX,0)")  # Turn off echo mode
         await self.set_mode("moving")  # Set gains and velocity to moving mode
         await self.com.write("MA")  # Set to absolute positioning mode
@@ -167,6 +163,7 @@ class YStage(BaseStage):
     async def shutdown(self):
         """Return stage to home position."""
         await self.move(self.home_position)  # Move to home position
+        await self.com.write("OFF")  # Turn off stage
 
     async def status(self) -> bool:
         """Query stage for status and position.
@@ -229,11 +226,21 @@ class YStage(BaseStage):
             bool: True if gains were set succesfully.
         """
 
-        await self.command(f"GAINS({gains})", read=False)
-        response = await self.command("GAINS")
-        response = response.strip()[1:].split(" ")
-        _gains = [float(g) for g in gains.split(",")]
-        all_true = all([float(g[2:]) == _gains[i] for i, g in enumerate(response)])
+        all_true = False
+
+        async with asyncio.timeout(10):
+            while not all_true:
+                await self.command(f"GAINS({gains})", read=False)
+                await asyncio.sleep(1)
+                response = await self.command("GAINS", delay=2)
+                try:
+                    response = response.strip()[1:].split(" ")
+                    _gains = [float(g) for g in gains.split(",")]
+                    all_true = all(
+                        [float(g[2:]) == _gains[i] for i, g in enumerate(response)]
+                    )
+                except ValueError:
+                    pass
 
         return all_true
 
@@ -245,7 +252,8 @@ class YStage(BaseStage):
         """
 
         await self.command(f"V{velocity}", read=False)
-        response = await self.command("V")
+        await asyncio.sleep(1)
+        response = await self.command("V", delay=2)
         response = float(response.strip()[1:])
 
         return response == velocity

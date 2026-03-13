@@ -16,8 +16,10 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "aioserial>=1.3.1",
     "attrs>=25.3.0",
     "imageio>=2.37.2",
+    "jupyterlab>=4.5.6",
     "numpy>=2.4.1",
     "pydantic>=2.11.7",
     "pyseq-core",
@@ -35,6 +37,10 @@ dev = [
     "ty>=0.0.1a15",
 ]
 
+[tool.uv.sources]
+#pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core", branch = "pyseq2500_imaging"}
+pyseq_core = { path = "../pyseq_core", editable = true }
+
 [project.urls]
 Homepage = "https://github.com/PySeqEcosystem"
 Issues = "https://github.com/PySeqEcosystem/pyseq2500"
@@ -42,9 +48,8 @@ Issues = "https://github.com/PySeqEcosystem/pyseq2500"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = [
-    "tests",
-]
+testpaths = ["tests",]
+log_cli = true
 log_format = "%(asctime)s %(levelname)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli_level = "DEBUG"
@@ -65,9 +70,6 @@ markers = """
     diagnostic: quick test to check health of instrumentation
     slow: slow tests 
     """
-
-[tool.uv.sources]
-pyseq-core = { path = "../pyseq_core", editable = true }
 
 [tool.pyright]
 reportIncompatibleMethodOverride = false
