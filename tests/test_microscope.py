@@ -85,8 +85,8 @@ async def microscope(request, fpga):
     # Start async worker
     m.start()
 
-    await m._configure({})
     await m._connect()
+    await m._configure({})
 
     # Do tests
     yield m
@@ -106,9 +106,9 @@ async def microscope(request, fpga):
 class TestMicroscope:
     async def test_init(self, microscope: Microscope):
         await microscope._initialize()
-        await microscope._configure({})
+        # await microscope._configure({})
 
-        _ = []
+        all_status = []
         for instrument in microscope.instruments.values():
             if "Laser" in instrument.name:
                 # Lasers not used so just test if connected
@@ -120,7 +120,8 @@ class TestMicroscope:
                 status = await instrument.status()
             if not status:
                 print(f"{instrument.name} failed to start")
-            assert status
+            all_status.append(status)
+        assert all(all_status)
 
     async def test_move(self, microscope: Microscope, fc_A_roi):
         x = fc_A_roi.stage.x_init

@@ -10,22 +10,19 @@ from typing import List
     params=[
         pytest.param("MockLaser", marks=pytest.mark.mock),
         pytest.param("Laser", marks=pytest.mark.hardware),
-        # pytest.param("RedLaser", marks=pytest.mark.hardware),
     ],
     scope="class",
 )
 async def lasers(request) -> List[Laser]:
-    name = request.param
-
     lasers = []
     for c in ["Red", "Green"]:
         name = f"{c}Laser"
-        if name == "MockLaser":
+        if request.param == "MockLaser":
             com = EmulatedLaser(name=name, address="LaserCOM")
         else:
             com = COM_DICT[name]
 
-        lasers.append(Laser(name=com.name, com=com, color=c.lower()))
+        lasers.append(Laser(name=name, com=com, color=c.lower()))
 
     yield lasers
 

@@ -18,7 +18,6 @@ class EmulatedTDICamera:
     gain: float = field(default=1.0)
     status: int = field(default=3)
     properties: dict = field(factory=dict)
-    # sensor_mode: str = field(default="TDI")
     number_image_buffers: int = field(default=0)
     left_emission: str = field(init=False)
     right_emission: str = field(init=False)
@@ -77,45 +76,6 @@ class EmulatedTDICamera:
         return [1]
 
 
-# def _import_dcam(pipe: multiprocessing.Queue):
-##def _import_dcam():
-##    """function to import dcam in seperate thread
-##
-##    dcam has a known bug with Windows.
-##    It sometimes can't be initialized after a period of inactivity.
-##
-##    import (& initialize) dcam asynchronously with a timeout using this function.
-##
-##    transfer dcam to main thread through pipe queue
-##    """
-##
-##    with warnings.catch_warnings():
-##        warnings.simplefilter("error", UserWarning)  # Treat UserWarning as an error
-##        try:
-##            from pyseq_core import dcam
-##
-##            #pipe.put(dcam)
-##        except UserWarning:
-##            # DCAM not installed
-##            LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
-##        except DCAMException:
-##            LOGGER.warning("DCAM failed, restart system")
-##            #pipe.put(None)
-
-
-##def _manage_dcam_import():
-##    """Run _import_dcam in background process that times out after 60 s."""
-##    pipe = multiprocessing.Queue()
-##    p = multiprocessing.Process(target=_import_dcam, args=(pipe,))
-##    p.start()
-##    p.join(timeout=60)
-##    if p.is_alive():
-##        p.terminate()
-##        p.join()
-##        raise TimeoutError("DCAM initialization timed out")
-##    return pipe.get()
-
-
 @define
 class dcamCOM:
     _connected: bool = field(default=False)
@@ -127,15 +87,6 @@ class dcamCOM:
         return self._connected
 
     async def connect(self):
-        ##        # Import dcam in seperate process asynchronously with timeout to avoid hangs
-        ##        with warnings.catch_warnings():
-        ##            warnings.filterwarnings("error", category=UserWarning)
-        ##            try:
-        ##                loop = asyncio.get_running_loop()
-        ##                dcam = await loop.run_in_executor(None, _manage_dcam_import)
-        ##            except TimeoutError:
-        ##                LOGGER.error("DCAM initialization timed out, restart computer")
-        ##                self._connected = True
         if not self.emulated:
             try:
                 self.emulated = False
@@ -159,12 +110,6 @@ class dcamCOM:
         try:
             for i in range(2):
                 if i not in self.cams:
-                    ##                if dcam is None:  # pyright: ignore[reportPossiblyUnboundVariable]
-                    ##                    # Use emulation for testing off sequencer
-                    ##                    self.cams[i] = EmulatedTDICamera(i)
-                    ##                    self._connected = False
-                    ##                else:
-                    ##                    # Real camera
                     if self.emulated:
                         self.cams[i] = EmulatedTDICamera(i)
                         LOGGER.debug(f"Camera {i} connected to CAM{i}")
@@ -183,7 +128,6 @@ class TDICameras(BaseCamera):
 
     name: str = field(default="Cameras")
     com: dcamCOM = field(default=dcamCOM())  # pyright: ignore[reportIncompatibleVariableOverride]
-    # _cams: dict = field(factory=dict)
     _status: list = field(default=[None, None])
     _exposure: list = field(default=[None, None])  # pyright: ignore[reportIncompatibleVariableOverride]
     _gain: list = field(default=[None, None])
