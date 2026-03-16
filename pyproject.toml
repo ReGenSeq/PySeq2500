@@ -16,9 +16,13 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "aioserial>=1.3.1",
     "attrs>=25.3.0",
+    "imageio>=2.37.2",
+    "jupyterlab>=4.5.6",
+    "numpy>=2.4.1",
     "pydantic>=2.11.7",
-    "pyseq-core @ git+https://github.com/ReGenSeq/pyseq_core.git",
+    "pyseq-core",
     "pyyaml>=6.0.2",
     "tomlkit>=0.13.3",
 ]
@@ -33,6 +37,10 @@ dev = [
     "ty>=0.0.1a15",
 ]
 
+[tool.uv.sources]
+pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core"}
+#pyseq_core = { path = "../pyseq_core", editable = true }
+
 [project.urls]
 Homepage = "https://github.com/PySeqEcosystem"
 Issues = "https://github.com/PySeqEcosystem/pyseq2500"
@@ -40,23 +48,29 @@ Issues = "https://github.com/PySeqEcosystem/pyseq2500"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = [
-    "tests",
-]
+testpaths = ["tests",]
+log_cli = true
 log_format = "%(asctime)s %(levelname)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli_level = "DEBUG"
-asyncio_default_fixture_loop_scope = "module"
-asyncio_default_test_loop_scope = "module"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 addopts = '-k "not hardware and not slow"'
 markers = """
+    fpga: run test on fpga instruments
     stage: run test on stages
     hardware: run test on physical sequencer hardware
     fluidic: tests involving fluidic components
     optical: tests involving optical components
+    camera: test involving cameras
     temperature: tests involving temperature controlling components
+    microscope: test microscope system
     control: tests involving only control routines, no hardware
     mock: tests using mock or emulated instruments
     diagnostic: quick test to check health of instrumentation
     slow: slow tests 
     """
+
+[tool.pyright]
+reportIncompatibleMethodOverride = false
+exclude = ["**/tests/**"]

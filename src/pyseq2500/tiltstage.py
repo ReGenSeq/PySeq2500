@@ -75,7 +75,7 @@ class EmulatedTiltMotor(EmulatedSerialCOM):
 
 @define(kw_only=True)
 class TiltMotor(BaseStage):
-    """Concrete implementation for the Tilt Motor.
+    """Instrument class for a Tilt Motor.
 
     This class provides a specific implementation for the abstract methods
     defined in `BaseStage`, allowing for control of the tilt motor.
@@ -95,6 +95,8 @@ class TiltMotor(BaseStage):
         command (str) -> str: Send a command string/dict to the motor.
     """
 
+    _status: bool = field(default=False)
+
     @cached_property
     def id(self):
         return self.name[-1]
@@ -104,7 +106,7 @@ class TiltMotor(BaseStage):
         self.position = 1
         while self.position != 0:
             await self.home()
-            await self.status()
+            await self.in_position()
             await self.clear()
             await asyncio.sleep(0.1)
             await self.get_position()
@@ -112,6 +114,7 @@ class TiltMotor(BaseStage):
     async def home(self):
         """Home motor."""
         # Need to read 3 lines
+        self._status = False
         await self.command(f"T{self.id}HM", read=2, delay=2)
 
     async def clear(self):
@@ -126,9 +129,13 @@ class TiltMotor(BaseStage):
     async def shutdown(self):
         """Return motor to home position."""
         await self.home()
+        await self.in_position()
 
     async def status(self):
-        """Waits for motor to finish moving before returning True"""
+        return self._status
+
+    async def in_position(self):
+        """Waits for motor to finish moving."""
 
         new_position = await self.get_position()
         old_position = new_position + 1
@@ -136,7 +143,7 @@ class TiltMotor(BaseStage):
             old_position = new_position
             await asyncio.sleep(1)
             new_position = await self.get_position()
-        return True
+        self._status = True
 
     async def move(self, position: int):
         """Move the motor to the specified position.
@@ -146,8 +153,10 @@ class TiltMotor(BaseStage):
         """
 
         while abs(self.position - position) >= self.tolerance:
-            await self.command(f"T{self.id}MOVETO {position}", delay=1)
-            await self.status()
+            self._status = False
+            await self.command(f"T{self.id}MOVETO {position}")
+            await asyncio.sleep(2)
+            await self.in_position()
 
     async def get_position(self):
         """Retrieve the current actual position of the motor.
@@ -192,10 +201,6 @@ class TiltStage(BaseStage):
     async def initialize(self):
         """Initialize and home the Tilt Motor."""
 
-        # Initialize FPGA
-        if self.com._cmdid == 0:
-            await self.command("RESET\n", read=2, delay=2)
-
         # Assign motors
         for i in range(1, 4):
             if self.tilts[i] is None:
@@ -210,7 +215,7 @@ class TiltStage(BaseStage):
         # Update positions
         self.update_positions()
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """Configure position limits on Tilt Motor."""
         # Already implemented in pyseq_core
         pass

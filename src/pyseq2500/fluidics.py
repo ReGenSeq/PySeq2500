@@ -117,7 +117,7 @@ class Pump(BasePump):
 
         return self.ready
 
-    async def wait_for_ready(self, delay: int = 0):
+    async def wait_for_ready(self, delay: Union[int, float] = 0):
         """Query and wait for pump to be in ready state.
 
         Use the delay argument to avoid unneccesarily querying the pump,
@@ -160,7 +160,7 @@ class Pump(BasePump):
         LOGGER.debug(f"{self.name}: min flow rate = {self.min_flow_rate} {units}")
         LOGGER.debug(f"{self.name}: max flow rate = {self.max_flow_rate} {units}")
 
-    def vol_to_step(self, volume: int) -> int:
+    def vol_to_step(self, volume: Union[int, float]) -> int:
         units = self.config["volume"]["units"]
         if volume > self.max_volume:
             warn(f"{volume} > max volume, only pumping {self.max_volume} {units}")
@@ -171,25 +171,25 @@ class Pump(BasePump):
         else:
             return int(round(volume / self.max_volume * self.steps))
 
-    def flow_to_sps(self, flow: int) -> int:
+    def flow_to_sps(self, flow: Union[int, float]) -> int:
         units = self.config["flow_rate"]["units"]
+
         if flow > self.max_flow_rate:
-            warn(
-                f"{flow} > max flow rate, only pumping at {self.max_flow_rate} {units}"
-            )
+            warn(f"{flow} > max flow rate, pumping at {self.max_flow_rate} {units}")
             flow = self.max_flow_rate
+
         if flow < self.min_flow_rate:
             warn(f"{flow} < min flow rate, pumping at {self.min_flow_rate} {units}")
             flow = self.min_flow_rate
-        else:
-            return int(round(flow / 60 * self.steps / self.max_volume))
+
+        return int(round(flow / 60 * self.steps / self.max_volume))
 
     async def pump(
         self,
         volume: Union[float, int],
         flow_rate: Union[float, int],
-        pause_time: Union[float, int] = None,
-        waste_flow_rate: Union[float, int] = None,
+        pause_time: Union[float, int] = 0,
+        waste_flow_rate: Union[float, int] = 10000,
     ):
         """Pump a specified volume at a specified flow rate from inlet to outlet of flowcell.
 
@@ -298,7 +298,7 @@ class Pump(BasePump):
 
 @define(kw_only=True)
 class EmulatedPump(EmulatedSerialCOM):
-    id: int = field(default=1)
+    # id: int = field(default=1)
     valve: str = field(default="I")
     position: int = field(default=0)
     ready: str = field(default="`")
@@ -339,7 +339,7 @@ class EmulatedPump(EmulatedSerialCOM):
                 response = ""
 
             if read:
-                response = f"{self.prefix}{self.id}{response}{self.suffix}"
+                response = f"{self.prefix}{response}{self.suffix}"
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
 
@@ -454,7 +454,7 @@ class Valve(BaseValve):
     async def status(self) -> bool:
         return self._status
 
-    async def configure(self, exp_config: dict = None):
+    async def configure(self):
         """No configuration needed for valve."""
         pass
 
@@ -474,13 +474,13 @@ class Valve(BaseValve):
 
         async with asyncio.timeout(timeout):
             while self.port != port:
-                await self.command(f"GO{port}")
+                await self.command(f"GO{port}", read=False)
                 position = await self.current_port()
                 if position != port:
                     self._status = False
         self._status = True
 
-    async def current_port(self) -> Union[str, int]:
+    async def current_port(self) -> int:
         """Read the current active port from the valve.
 
         This method should be implemented by subclasses to query the physical
@@ -511,7 +511,7 @@ class EmulatedValve(EmulatedSerialCOM):
 
     @n_ports.default
     def get_n_ports(self):
-        match = re.search(re.compile(r"VALVE(\d+)"), self.name)
+        match = re.search(re.compile(r"Valve(\d+)"), self.name)
         if match:
             return int(match.groups()[0])
         else:

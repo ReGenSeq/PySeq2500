@@ -14,7 +14,7 @@ import asyncio
     ],
     scope="class",
 )
-async def fc(request) -> FlowCell:
+async def fc(request):
     name = request.param
     # Construct FlowCell
     if name == "B":
@@ -32,6 +32,8 @@ async def fc(request) -> FlowCell:
         fc = FlowCell(name=name)
     # Start async worker
     fc.start()
+
+    await fc._connect()
 
     # Do tests
     yield fc
@@ -51,15 +53,15 @@ async def fc(request) -> FlowCell:
 @pytest.mark.slow
 class TestFlowCell:
     async def test_init(self, fc: FlowCell):
-        fc.initialize()
         fc.configure(DEFAULT_CONFIG)
+        fc.initialize()
         await fc._queue.join()
 
         for i in fc.iter_instruments:
             assert i.connected
 
         assert fc.Pump.max_volume > fc.Pump.min_volume
-        assert fc._inlet in [2, 8]
+        assert fc.inlet in [2, 8]
 
     async def test_pump(self, fc: FlowCell):
         port = fc.Valve.config["port"]["valid_list"][1]

@@ -1,9 +1,10 @@
 from pyseq_core.base_instruments import BaseStage
 import logging
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, SerialCOM
 from attrs import define, field
 import re
 import asyncio
+from typing import Union
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -114,7 +115,11 @@ class XStage(BaseStage):
     """
 
     name: str = field(default="XStage")
-    home_position: int = field(default=30000)
+    com: Union[SerialCOM, EmulatedSerialCOM] = field(default=None)  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    @property
+    def home_position(self):
+        return 30000
 
     async def initialize(self):
         """Initialize and home the XStage."""
@@ -123,7 +128,7 @@ class XStage(BaseStage):
 
         # Configure XStage
         await self.command(
-            "EM=2"
+            f"EM={self.config.get('echo_mode', 2)}"
         )  # Change echo mode to respond only to print and list commands
         await self.com.write("EE=1")  # Enable Encoder
         await self.com.write("VI=40")  # Set Initial Velocity
@@ -157,6 +162,7 @@ class XStage(BaseStage):
         while not homed:
             await self.com.write("EX 1")
             while not await self.status():
+                await asyncio.sleep(2)
                 # Wait until stage stops moving
                 pass
             # Check if home input changes
@@ -166,7 +172,7 @@ class XStage(BaseStage):
 
         return True
 
-    async def configure(self):
+    async def configure(self, exp_config: dict = {}):
         """Configure position limits on XStage."""
         # Already implemented in pyseq_core
         pass
@@ -183,7 +189,7 @@ class XStage(BaseStage):
         """
         response = await self.command("PR MV")
         ready = not bool(int(response))
-
+        await asyncio.sleep(0.5)
         await self.get_position()
 
         return ready
@@ -196,6 +202,7 @@ class XStage(BaseStage):
         if position != self.position:
             while position != await self.get_position():
                 await self.command(f"MA {position}", read=False)
+                await asyncio.sleep(1)
                 while await self.status():
                     await asyncio.sleep(1)
 

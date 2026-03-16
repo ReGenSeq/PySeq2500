@@ -13,6 +13,31 @@ Test:                                                                           
     inlet_port: 
       2: 4
       8: 5
+  Microscope:
+    resolution: 0.375                                                           # um/px
+  Cameras:
+    sensor_width: 2048                                                          # width of TDI line sensor in pixels
+    exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
+      min_val: 0.00002
+      max_val: 1.004
+      units: s
+    gain:                                                       
+      min_val: 0
+      max_val: 15
+      units: X
+    save_nt: False                                                              # save images with nucleotide name instead of emission wavelength
+    TDI: 
+      sensor_mode_line_bundle_height: &y_step 128
+    AREA: 
+      sensor_mode_line_bundle_height: 64
+    0:                                                                          # Camera ID 0 properties
+      nucleotides: "AG"
+      left_emission: 687                                                          # A
+      right_emission: 558                                                         # G
+    1:                                                                          # Camera ID 1 properties                   
+      nucleotides: "TC"  
+      left_emission: 610                                                          # T
+      right_emission: 740                                                         # C
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600
@@ -29,7 +54,6 @@ Test:                                                                           
     barrels_per_lane: 8
     max_sps: 8000                                                               # max steps per second
     min_sps: 40                                                                 # min steps per second
-
   PumpB:
     <<: *pump                                                                   # reference settings using anchor from `PumpA`
     com:
@@ -71,25 +95,26 @@ Test:                                                                           
       address: IL000001A
       prefix: ""
       suffix: "\r"   
-    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    spum: 0.4096                                                                # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     origin:                                                                     # reference step for flow cells, used in `custom_roi_factory`
-      A: 100
-      B: 200
-    step: 100                                                                   # steps between tiles used in microscope routines
+      A: 17571
+      B: 43310
+    step: 315                                                                   # steps between tiles used in microscope routines
     position:
-      min_val: 0
+      min_val: 1000
       max_val: 50000
       units: steps
+    echo_mode: 2                                                                # 2 = does not echo back commands
   YStage:
     com:
       baudrate: 9600
       timeout: 1
       address: IL000002A
-      prefix: ""
+      prefix: "1"
       suffix: "\r\n"   
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    origin: 300                                                                 # reference step for flow cells, used in `custom_roi_factory`
-    step: 200                                                                   # steps between tiles used in microscope routines
+    origin: -180000                                                            # reference step for flow cells, used in `custom_roi_factory`
+    step: *y_step                                                                   # line bundle height for TDI imaging
     position:
       min_val: -7000000
       max_val: 7000000
@@ -117,19 +142,24 @@ Test:                                                                           
       min_val: 0
       max_val: 30000
       units: steps
-    tolerance: 2   
+    tolerance: 5   
   TiltMotor1: *tiltstage
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             
   ZStage:
-    address: TiltStage                                                          # shares communication address with `TiltStage`
-    spum: 1                                                                     # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    step: 1                                                                     # steps between z planes used in microscope z-stack routiness
+    com:
+      <<: *fpgacom                                                              # shares communication address with `TiltStage`
+    spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
+    step: 235                                                                   # steps between z planes used in microscope z-stack routiness based on Nyquist sampling
     position:
       min_val: 0
-      max_val: 65000
+      max_val: 65535
       units: steps
-  redLaser: 
+    velocity: 
+      min_val: 0.1
+      max_val: 5
+      units: "mms/s"
+  RedLaser: 
     com:
       baudrate: 9600
       timeout: 1
@@ -140,7 +170,7 @@ Test:                                                                           
       min_val: 0
       max_val: 400
       units: mW
-  greenLaser: 
+  GreenLaser: 
     com:
       baudrate: 9600
       timeout: 1
@@ -159,21 +189,23 @@ Test:                                                                           
       units: C
   TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
   Shutter:
-    address: TiltStage
-  redFilterWheel: 
-    address: TiltStage
+    com:
+      <<: *fpgacom
+  EmissionFilter:
+    com:
+      <<: *fpgacom
+    filter: &emission_filter
+      valid_list: {'in':'I', 'out':'O'}
+  RedFilterWheel: 
+    com:
+      <<: *fpgacom
     filter: &red_filter_wheel                                                   # &red_filter_wheel anchor for future reference
-      valid_list: {'home':0, 'open':1, '0.1':2, '1.0':3}
-  greenFilterWheel: 
-    address: TiltStage
+      valid_list: {'home':0, '4.0':36, '2.4':71, '0.2':-107, 'open':143, '1.0':107, '0.6':-36, '0.5':-71}
+  GreenFilterWheel: 
+    com:
+      <<: *fpgacom
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
-      valid_list: {'home':0, 'open':1, '0.1':2, '2.0':3}
-  Camera_558_687: &camera                                                       # &camera anchor for future reference
-    exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
-      min_val: 0.1
-      max_val: 10
-      units: s
-  Camera_610_740: *camera                                                       # reference settings using anchor from `Camera_558_687`                                         
+      valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}          
 # Extra validation parameters for stage beyond X, Y, Z 
 # Should align with stage table in default.toml
   stage: 
@@ -188,8 +220,9 @@ Test:                                                                           
       green: *green_laser                                                       # reference settings using anchor from power of `redLaser`
       red: *red_laser                                                           # reference settings using anchor from power of `greenLaser`
     exposure: 
-      Camera_558_687: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
-      Camera_610_740: *camera_exposure                                          # reference settings using anchor from exposure of `Camera_558_687`
+      Camera0: *camera_exposure                                                 # reference settings using anchor from exposure of `Camera0`
+      Camera1: *camera_exposure                                                 # reference settings using anchor from exposure of `Camera1`
     filter: 
       green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
       red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`
+      emission: *emission_filter
