@@ -38,8 +38,8 @@ dev = [
 ]
 
 [tool.uv.sources]
-#pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core", branch = "pyseq2500_imaging"}
-pyseq_core = { path = "../pyseq_core", editable = true }
+pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core"}
+#pyseq_core = { path = "../pyseq_core", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/PySeqEcosystem"
