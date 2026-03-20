@@ -219,3 +219,6 @@ personal_scripts
 # setuptools_scm package version
 *_version.py
 
+# AI tools
+CLAUDE.md
+.qwen
