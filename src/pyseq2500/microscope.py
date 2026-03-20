@@ -19,6 +19,7 @@ from typing import Type, Union, Literal, Optional
 from math import ceil
 from functools import cached_property
 from pathlib import Path
+import numpy as np
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -269,6 +270,60 @@ class Microscope(BaseMicroscope):
 
         LOGGER.debug(msg)
         await asyncio.gather(*_)
+
+    async def _focus_stack(
+        self, z_init: int, z_last: int, n_frames: int = 0, velocity: float = 0.0
+    ):
+        if n_frames == 0:
+            n_frames = DEFAULT_CONFIG["focus"]["n_frames"]
+        if velocity == 0.0:
+            velocity = DEFAULT_CONFIG["focus"]["velocity"]
+
+        # Setup camera, move objective to initial position and set velocity
+        # of objective to move during capture.
+        setup = []
+        setup.append(self.Camera.check_free())
+        setup.append(self.Camera.allocate("AREA", n_frames))
+        setup.append(self.ZStage.set_velocity(self.ZStage.max_velocity))
+        setup.append(self.ZStage.move(z_init))
+        await asyncio.gather(*setup)
+        await self.ZStage.set_velocity(velocity)
+
+        # Update limits that were previously based on estimates
+        # obj.update_focus_limits(cam_interval = cam1.getFrameInterval(),
+        #                         range = obj.focus_range,
+        #                         spacing = obj.focus_spacing)
+
+        # Start acquiring focus stack
+        await self.ZStage.set_trigger(z_init)
+        await self.Shutter.open()
+        try:
+            start = [self.ZStage.move(z_last), self.Camera.startAcquisition()]
+            await asyncio.gather(*start)
+        except asyncio.TimeoutError:
+            LOGGER.warning("Objective took too long to move.")
+
+        # Wait for imaging
+        try:
+            await self.Camera.waitForFrames(n_frames)
+        except asyncio.TimeoutError:
+            LOGGER.warning("Cameras took too long to acquire frames.")
+
+        # Stop acquiring focus stack
+        stop = [self.Shutter.close(), self.Camera.stopAcquisition()]
+        await asyncio.gather(*stop)
+
+        # Get focus stack
+        frame_count = await self.Camera.getFrameCount()
+        if frame_count != n_frames:
+            LOGGER.warning("Cameras did not acquire expected number of frames.")
+            focus_stack = np.zeros((0, 0))  # Return empty array if frames not acquired
+        else:
+            focus_stack = await self.Camera.getFocusStack()
+
+        await self.Camera.freeFrames()  # Free camera memory
+
+        return focus_stack
 
     async def _set_parameters(
         self, image_params: OpticsParams, mode: Literal["image", "focus", "expose"]

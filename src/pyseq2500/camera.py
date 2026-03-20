@@ -1,10 +1,13 @@
 import logging
 from pyseq_core.base_instruments import BaseCamera
+from pyseq2500.utils import HW_CONFIG
 from attrs import define, field
 from typing import Union, List, Literal
 from pathlib import Path
 import ctypes
 from pyseq_core.dcam import DCAMException
+import asyncio
+import numpy as np
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -51,7 +54,7 @@ class EmulatedTDICamera:
 
     def setAREA(self):
         self.setPropertyValue("sensor_mode", 1)
-        self.setPropertyValue("sensor_mode_line_bundle_height", 128)
+        self.setPropertyValue("sensor_mode_line_bundle_height", 64)
         self.sensor_mode = "AREA"
 
     def captureSetup(self):
@@ -72,8 +75,21 @@ class EmulatedTDICamera:
     def getFrameCount(self) -> int:
         return self.number_image_buffers
 
-    def getFocusStack(self) -> list:
-        return [1]
+    def getFrameInterval(self) -> float:
+        return 0.040202
+
+    def getFocusStack(self) -> np.array:
+        # Return array of arrays (image data per frame per channel)
+        # Shape: (n_frames, 2) with dtype=object for this camera's 2 channels
+        n_frames = self.number_image_buffers
+        focus_stack = np.empty((n_frames, 2), dtype=object)
+        for i in range(n_frames):
+            for j in range(2):
+                focus_stack[i, j] = (
+                    np.ones((64, HW_CONFIG["Cameras"]["sensor_width"]), dtype=np.uint16)
+                    * 1000
+                )
+        return focus_stack
 
 
 @define
@@ -321,3 +337,19 @@ class TDICameras(BaseCamera):
             nframes[camid] += cam.getFrameCount()
             LOGGER.debug(f"Camera{camid}:: Took {nframes[camid]} frames")
         return (nframes[0] + nframes[1]) / 2
+
+    async def waitForFrames(self, n_frames: int):
+        est_time = 0
+        for cam in self:
+            interval = cam.getFrameInterval()
+            est_time += interval * n_frames
+
+        async with asyncio.timeout(est_time):
+            while await self.getFrameCount() < n_frames:
+                await asyncio.sleep(0.5)
+
+    async def getFocusStack(self):
+        stack = []
+        for cam in self:
+            stack.append(cam.getFocusStack())
+        return np.hstack(stack)

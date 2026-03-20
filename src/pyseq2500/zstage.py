@@ -116,13 +116,17 @@ class ZStage(BaseStage):
             position (int): The target position to move the motor to.
         """
 
-        while self.position != position:
-            response = await self.command(f"ZMV {position}")
-            if response.strip() == "ZMV":
-                await asyncio.sleep(1)
-                await self.get_position()
-            else:
-                self._status = False
+        # Estimated time to move to position in seconds
+        est_time = abs(position - self.position) / self.spum / 1000 / self.velocity
+
+        async with asyncio.timeout(est_time + 10):
+            while self.position != position:
+                response = await self.command(f"ZMV {position}")
+                if response.strip() == "ZMV":
+                    await asyncio.sleep(1)
+                    await self.get_position()
+                else:
+                    self._status = False
 
     async def get_position(self):
         """Retrieve the current actual position of the motor.
@@ -167,3 +171,8 @@ class ZStage(BaseStage):
     def max_velocity(self):
         """Maximum velocity of the objective."""
         return self.config["velocity"]["max_val"]
+
+    async def set_trigger(self, step: int):
+        """Set the step at which the camera will be triggered."""
+        await self.command(f"ZTRG {step}")
+        await self.command("ZYT 0 3")

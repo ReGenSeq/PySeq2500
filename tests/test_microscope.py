@@ -8,6 +8,7 @@ from pyseq2500.laser import EmulatedLaser, Laser
 from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
 from pyseq2500.camera import TDICameras, dcamCOM
 
+
 # from pyseq2500.utils import DEFAULT_CONFIG
 import pytest
 import pytest_asyncio
@@ -104,6 +105,7 @@ async def microscope(request, fpga):
 @pytest.mark.microscope
 @pytest.mark.asyncio
 class TestMicroscope:
+    @pytest_asyncio.fixture(autouse=True)
     async def test_init(self, microscope: Microscope):
         await microscope._initialize()
         # await microscope._configure({})
@@ -159,3 +161,7 @@ class TestMicroscope:
             await microscope._scan(fc_A_roi)
             written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
             assert len(written_files) == 4
+
+    async def test_focus_stack(self, microscope: Microscope):
+        focus_stack = await microscope._focus_stack(2000, 62000, 200)
+        assert focus_stack.shape == (200, 4)
