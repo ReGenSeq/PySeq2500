@@ -49,16 +49,20 @@ class Microscope(BaseMicroscope):
             "YStage": YStage(name="YStage", com=COM_DICT["YStage"]),
             "ZStage": ZStage(name="ZStage", com=COM_DICT["ZStage"]),
             "TiltStage": TiltStage(name="TiltStage", com=COM_DICT["TiltStage"]),
-            "GreenLaser": Laser(
-                name="GreenLaser", com=COM_DICT["GreenLaser"], color="green"
-            ),
-            "RedLaser": Laser(name="RedLaser", com=COM_DICT["RedLaser"], color="red"),
-            "GreenFilterWheel": FilterWheel(
-                name="GreenFilterWheel", com=COM_DICT["GreenFilterWheel"]
-            ),
-            "RedFilterWheel": FilterWheel(
-                name="RedFilterWheel", com=COM_DICT["RedFilterWheel"]
-            ),
+            "Lasers": {
+                "green": Laser(
+                    name="GreenLaser", com=COM_DICT["GreenLaser"], color="green"
+                ),
+                "red": Laser(name="RedLaser", com=COM_DICT["RedLaser"], color="red"),
+            },
+            "FilterWheels": {
+                "green": FilterWheel(
+                    name="GreenFilterWheel", com=COM_DICT["GreenFilterWheel"]
+                ),
+                "red": FilterWheel(
+                    name="RedFilterWheel", com=COM_DICT["RedFilterWheel"]
+                ),
+            },
             "EmissionFilter": EmissionFilter(
                 name="EmissionFilter", com=COM_DICT["EmissionFilter"]
             ),
@@ -90,7 +94,7 @@ class Microscope(BaseMicroscope):
     async def _configure(self, exp_config: dict = {}):
         """Configure microscope"""
 
-        for instrument in self.instruments.values():
+        for instrument in self.iter_instruments:
             await instrument.configure(exp_config)
 
     async def sync_YStage_FPGA(self):
@@ -203,7 +207,7 @@ class Microscope(BaseMicroscope):
             raise ValueError("Specify initial and last Z stage position.")
 
         # Loop over z stack
-        z_pos = range(roi.stage.z_init, z_last, z_step)
+        z_pos = range(z_init, z_last, z_step)
         nz = len(z_pos)
         for i, z in enumerate(z_pos):
             await self.ZStage.move(z)
@@ -244,6 +248,7 @@ class Microscope(BaseMicroscope):
         tilt2: int = -1,
         tilt3: int = -1,
         tilt: int = -1,
+        **kwargs,
     ):
         """Move the stage to x,y,z,tilt coordinates."""
 
@@ -329,10 +334,36 @@ class Microscope(BaseMicroscope):
         self, image_params: OpticsParams, mode: Literal["image", "focus", "expose"]
     ):
         """Async set the parameters for the ROI."""
-        pass
+
+        _ = []
+        for color in self.Lasers:
+            _.append(self.Lasers[color].set_power(image_params.power.get(color)))
+            _.append(
+                self.FilterWheels[color].set_filter(image_params.filter.get(color))
+            )
+        _.append(self.Camera.set_exposure(image_params.exposure))
+        await asyncio.gather(*_)
 
     async def _find_focus(self, roi: ROIType):
         """Async set the parameters for the ROI."""
+
+        # Setup out of focus scan to find FOVs to focus on
+        setup = [
+            self._move(**roi.stage.model_dump()),
+            self._set_parameters(roi.focus.optics, mode="focus"),
+        ]
+        await asyncio.gather(*setup)
+
+        # Acquire out of focus scan
+        await self._scan(
+            roi,
+            name=f"RoughScan_{roi.name}",
+            image_dir=roi.focus.output,  # change to image_dir in pyseq_core
+            z_last=roi.stage.z_init + 1,
+        )
+
+        return True
+
         # Reset X & Y stage to initial position after finding focus
         # Save Z stage focus position to `ROI.focus.z_focus`
         # Move Z stage to `ROI.focus.z_focus`

@@ -34,10 +34,12 @@ Test:                                                                           
       nucleotides: "AG"
       left_emission: 687                                                          # A
       right_emission: 558                                                         # G
+      name: Camera_687_558
     1:                                                                          # Camera ID 1 properties                   
       nucleotides: "TC"  
       left_emission: 610                                                          # T
       right_emission: 740                                                         # C
+      name: Camera_610_740
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600

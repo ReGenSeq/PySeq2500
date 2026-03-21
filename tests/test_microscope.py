@@ -48,10 +48,14 @@ async def microscope(request, fpga):
             "YStage": YStage(name="YStage", com=ycom),
             "ZStage": ZStage(name="ZStage", com=zcom),
             "TiltStage": TiltStage(name="TiltStage", com=tcom),
-            "GreenLaser": Laser(name="GreenLaser", com=glcom, color="green"),
-            "RedLaser": Laser(name="RedLaser", com=rlcom, color="red"),
-            "GreenFilterWheel": FilterWheel(name="GreenFilterWheel", com=gfwcom),
-            "RedFilterWheel": FilterWheel(name="RedFilterWheel", com=rfwcom),
+            "Lasers": {
+                "green": Laser(name="GreenLaser", com=glcom, color="green"),
+                "red": Laser(name="RedLaser", com=rlcom, color="red"),
+            },
+            "FilterWheels": {
+                "green": FilterWheel(name="GreenFilterWheel", com=gfwcom),
+                "red": FilterWheel(name="RedFilterWheel", com=rfwcom),
+            },
             "EmissionFilter": EmissionFilter(name="EmissionFilter", com=ecom),
             "Shutter": Shutter(name="Shutter", com=scom),
             "Camera": TDICameras(com=dcam),
@@ -111,7 +115,7 @@ class TestMicroscope:
         # await microscope._configure({})
 
         all_status = []
-        for instrument in microscope.instruments.values():
+        for instrument in microscope.iter_instruments:
             if "Laser" in instrument.name:
                 # Lasers not used so just test if connected
                 status = instrument.connected
@@ -165,3 +169,6 @@ class TestMicroscope:
     async def test_focus_stack(self, microscope: Microscope):
         focus_stack = await microscope._focus_stack(2000, 62000, 200)
         assert focus_stack.shape == (200, 4)
+
+    async def test_find_focus(self, microscope: Microscope, fc_A_roi):
+        assert await microscope._find_focus(fc_A_roi)

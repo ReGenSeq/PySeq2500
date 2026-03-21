@@ -78,7 +78,7 @@ class EmulatedTDICamera:
     def getFrameInterval(self) -> float:
         return 0.040202
 
-    def getFocusStack(self) -> np.array:
+    def getFocusStack(self) -> np.ndarray:
         # Return array of arrays (image data per frame per channel)
         # Shape: (n_frames, 2) with dtype=object for this camera's 2 channels
         n_frames = self.number_image_buffers
@@ -201,7 +201,9 @@ class TDICameras(BaseCamera):
             nbytes += cam.saveImage(image_name, image_dir)
         return nbytes
 
-    async def set_exposure(self, time: float) -> List[float]:
+    async def set_exposure(
+        self, exposure: Union[float, dict[str, float]]
+    ) -> List[float]:
         """Sets the exposure time (s) for the camera.
 
         The definition for exposure changes between TDI and AREA mode:
@@ -216,15 +218,25 @@ class TDICameras(BaseCamera):
         The minimum interval that you can set is 20 μs.
 
         Args:
-            time (float): The desired exposure time in seconds.
+            exposure (float | dict[str, float]): The desired exposure time in seconds,
+                or a dict mapping camera names to exposure times.
 
         Returns:
-            float: The set exposure time in seconds.
+            List[float]: The set exposure times in seconds.
         """
-        for i, cam in self.cams.items():
-            cam.setPropertyValue("exposure_time", time / 1000)
-            time = cam.getPropertyValue("exposure_time")
-            self._exposure[i] = time * 1000
+        if isinstance(exposure, dict):
+            for cam in self.cams.values():
+                cam_name = self.config[cam.camera_id]["name"]
+                if cam_name in exposure:
+                    time = exposure[cam_name]
+                    cam.setPropertyValue("exposure_time", time / 1000)
+                    time = cam.getPropertyValue("exposure_time")
+                    self._exposure[cam.camera_id] = time * 1000
+        else:
+            for i, cam in self.cams.items():
+                cam.setPropertyValue("exposure_time", exposure / 1000)
+                time = cam.getPropertyValue("exposure_time")
+                self._exposure[i] = time * 1000
         return self._exposure
 
     async def get_exposure(self) -> List[float]:
