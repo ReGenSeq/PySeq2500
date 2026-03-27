@@ -109,21 +109,23 @@ class ZStage(BaseStage):
         """Return cached status of objective."""
         return self._status
 
-    async def move(self, position: int):
+    async def move(self, position: int, read: int = 1):
         """Move the motor to the specified position.
+
+        Read 2 lines if moving objective after setting camera triggers
 
         Args:
             position (int): The target position to move the motor to.
+            read (int): Number of response lines to read
         """
 
         # Estimated time to move to position in seconds
         est_time = abs(position - self.position) / self.spum / 1000 / self.velocity
-
-        async with asyncio.timeout(est_time + 10):
+        async with asyncio.timeout((est_time + 1) * 10):
             while self.position != position:
-                response = await self.command(f"ZMV {position}")
-                if response.strip() == "ZMV":
-                    await asyncio.sleep(1)
+                response = await self.command(f"ZMV {position}", read=read)
+                if response.strip() in ["ZMV", "@LOG Trigger Camera"]:
+                    await asyncio.sleep(est_time + 0.5)
                     await self.get_position()
                 else:
                     self._status = False
@@ -134,13 +136,19 @@ class ZStage(BaseStage):
         Returns:
             int: The current position of the motor.
         """
-        position = await self.command("ZDACR")
-        try:
-            self._position = int(position.split(" ")[1])
-            self._status = True
-        except TypeError:
-            LOGGER.warning("{self.name} :: Could not parse objective position")
-            self._status = False
+
+        attempts = 0
+        while attempts < 3:
+            try:
+                position = await self.command("ZDACR")
+                self._position = int(position.split(" ")[1])
+                self._status = True
+                return self._position
+            except ValueError:
+                LOGGER.debug(f"{self.name} :: Still moving")
+                self._status = False
+                await asyncio.sleep(1)
+                attempts += 1
 
         return self._position
 
@@ -148,7 +156,7 @@ class ZStage(BaseStage):
         """Set velocity in mm/s"""
 
         # Convert from mm/s to step/s
-        vel = velocity * 1288471
+        vel = int(velocity * 1288471)
 
         response = await self.command(f"ZSTEP {vel}")
         if response.strip() == "ZSTEP":

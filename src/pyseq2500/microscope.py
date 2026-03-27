@@ -303,7 +303,7 @@ class Microscope(BaseMicroscope):
         await self.ZStage.set_trigger(z_init)
         await self.Shutter.open()
         try:
-            start = [self.ZStage.move(z_last), self.Camera.startAcquisition()]
+            start = [self.ZStage.move(z_last, read=2), self.Camera.startAcquisition()]
             await asyncio.gather(*start)
         except asyncio.TimeoutError:
             LOGGER.warning("Objective took too long to move.")

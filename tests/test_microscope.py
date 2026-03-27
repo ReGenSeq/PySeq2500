@@ -79,13 +79,13 @@ async def microscope(request, fpga):
             "FPGA",
             "ZStage",
             "TiltStage",
-            "GreenFilterWheel",
-            "RedFilterWheel",
             "EmissionFilter",
             "Shutter",
         ]
         for fi in fpga_instruments:
             m.instruments[fi].com = fpga
+        for color in ["green", "red"]:
+            m.instruments["FilterWheels"][color].com = fpga
 
     # Start async worker
     m.start()
