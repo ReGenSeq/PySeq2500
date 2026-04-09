@@ -132,7 +132,7 @@ class Pump(BasePump):
         while not await self.status():
             await asyncio.sleep(self._interval)
 
-    async def configure(self):
+    async def configure(self, barrels_per_lane: Union[int, None] = None):
         """Configures volume and flow rate limits based on barrels_per_lane.
 
         The number of syringe barrels dedicated to a flow cell lane is set by
@@ -140,7 +140,10 @@ class Pump(BasePump):
         and is used to calculate the min/max volume and min/max flow rate per lane.
         """
 
-        self.barrels_per_lane = self.config["barrels_per_lane"]
+        if barrels_per_lane is None:
+            self.barrels_per_lane = self.config["barrels_per_lane"]
+        else:
+            self.barrels_per_lane = barrels_per_lane
 
         self.max_volume = self.barrel_volume * self.barrels_per_lane
         self.min_volume = self.max_volume / self.steps

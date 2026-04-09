@@ -1,6 +1,5 @@
 import logging
 from pyseq_core.base_instruments import BaseCamera
-from pyseq2500.utils import HW_CONFIG
 from attrs import define, field
 from typing import Union, List, Literal
 from pathlib import Path
@@ -22,6 +21,7 @@ class EmulatedTDICamera:
     status: int = field(default=3)
     properties: dict = field(factory=dict)
     number_image_buffers: int = field(default=0)
+    focus_stack: np.ndarray = field(default=None)
     left_emission: str = field(init=False)
     right_emission: str = field(init=False)
     sensor_mode: Literal["TDI", "AREA"] = field(default="TDI")
@@ -79,17 +79,39 @@ class EmulatedTDICamera:
         return 0.040202
 
     def getFocusStack(self) -> np.ndarray:
-        # Return array of arrays (image data per frame per channel)
-        # Shape: (n_frames, 2) with dtype=object for this camera's 2 channels
-        n_frames = self.number_image_buffers
-        focus_stack = np.empty((n_frames, 2), dtype=object)
-        for i in range(n_frames):
-            for j in range(2):
-                focus_stack[i, j] = (
-                    np.ones((64, HW_CONFIG["Cameras"]["sensor_width"]), dtype=np.uint16)
-                    * 1000
-                )
-        return focus_stack
+        """Return focus stack adjusted to match number_image_buffers.
+
+        Uses cached Zenodo data. If cached data has more frames than requested,
+        truncates to requested number. If fewer, repeats last frame.
+        If number_image_buffers is 0, returns all cached frames.
+
+        Returns:
+            np.ndarray: Focus stack with shape (n_frames, 2), dtype=object,
+                        where each element is a 16x2048 uint16 array
+        """
+        if self.focus_stack is None:
+            # Return empty array if no focus stack data available
+            n_frames = self.number_image_buffers
+            focus_stack = np.empty((n_frames, 2), dtype=object)
+            for i in range(n_frames):
+                for j in range(2):
+                    focus_stack[i, j] = np.zeros((16, 2048), dtype=np.uint16)
+            return focus_stack
+
+        n_cached = self.focus_stack.shape[0]
+        n_requested = (
+            self.number_image_buffers if self.number_image_buffers > 0 else n_cached
+        )
+
+        if n_requested <= n_cached:
+            # Truncate - use first n_requested frames
+            return self.focus_stack[:n_requested]
+        else:
+            # Repeat last frame to match requested number
+            n_extra = n_requested - n_cached
+            last_frame = self.focus_stack[-1:]
+            extra_frames = np.repeat(last_frame, n_extra, axis=0)
+            return np.vstack([self.focus_stack, extra_frames])
 
 
 @define
@@ -97,6 +119,7 @@ class dcamCOM:
     _connected: bool = field(default=False)
     cams: dict[int, EmulatedTDICamera] = field(factory=dict)
     emulated: bool = field(default=False)
+    focus_stack: dict[int, np.ndarray] = field(default=None)
 
     @property
     def connected(self):
@@ -127,7 +150,10 @@ class dcamCOM:
             for i in range(2):
                 if i not in self.cams:
                     if self.emulated:
-                        self.cams[i] = EmulatedTDICamera(i)
+                        cam_focus_stack = None
+                        if self.focus_stack is not None and i in self.focus_stack:
+                            cam_focus_stack = self.focus_stack[i]
+                        self.cams[i] = EmulatedTDICamera(i, focus_stack=cam_focus_stack)
                         LOGGER.debug(f"Camera {i} connected to CAM{i}")
                     else:
                         self.cams[i] = HamamatsuCamera(i)

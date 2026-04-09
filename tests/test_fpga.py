@@ -186,8 +186,7 @@ class TestFilterWheel:
 
     @pytest.mark.diagnostic
     async def test_move(self, filterwheel: FilterWheel):
-        filter = "open"
-        await filterwheel.set_filter(filter)
+        await filterwheel.set_filter("open")
         assert filterwheel.filter == "open"
 
     async def test_shutdown(self, filterwheel: FilterWheel):

@@ -29,22 +29,41 @@ overlap = 0                                                                     
 [image.optics]
 # Table for imaging optical parameters
 # See `optics` table for options
+power.red = 0
+power.green = 0                                                  
+filter.red = "home"
+filter.green = "home"
+filter.emission = "in"
+exposure.Camera_558_687 = 1
+exposure.Camera_610_740 = 1  
 
 [expose]
 # Table for exposing parameters (No image capture)
-n_exposures = 0
+expose = 0
+
 [expose.optics]
 # Table for exposing optical parameters
 # See `optics` table for options
+power.red = 0
+power.green = 0                                                  
+filter.red = "home"
+filter.green = "home"
 
 [focus]
 # Table for focusing parameters 
-routine = "partial once"                                                        # Autofocus routine to use, see auto_focus_routines for all options
+routine = "full once"                                                        # Autofocus routine to use, see auto_focus_routines for all options
 n_frames = 200                                                                  # Number of frames to take in objective stack
 velocity = 0.1                                                                  # Velocity (mm/s) to move objective in focus stack, 
 [focus.optics]
 # Table for focusing optical parameters
 # See `optics` table for options
+power.red = 0
+power.green = 0                                                  
+filter.red = "home"
+filter.green = "home"
+filter.emission = "in"
+exposure.Camera_558_687 = 1
+exposure.Camera_610_740 = 1  
 
 
 [stage]
@@ -82,6 +101,7 @@ save_nt = false                                                                 
 flow_rate = 0                                                                   # uL/min
 pause_time = 1                                                                  # Time to wait between aspirate and dispense in s
 waste_flow_rate = 12000                                                         # uL/min
+reverse = false
 
 
 [flowcell]
@@ -138,8 +158,14 @@ handlers = ["consoleHandler"]
 
 [auto_focus_routines]
 # Valid autofocus routines
-routines = ["full", "full_once", "partial", "partial once"]
+routines = ["full", "full once", "partial", "partial once"]
 
 [rotate_logs]
 # Flag to add rotatingHandler to logger
 rotate_logs = false                                                             # flag to rotate logs during testing or idleing
+
+[roi_fields]
+LLx = 1.0
+LLy = 1.0
+URx = 1.0
+URy = 1.0

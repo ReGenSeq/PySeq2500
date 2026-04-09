@@ -1,12 +1,4 @@
 from pyseq2500.microscope import Microscope
-from pyseq2500.xstage import EmulatedXStage, XStage
-from pyseq2500.ystage import EmulatedYStage, YStage
-from pyseq2500.zstage import EmulatedZStage, ZStage
-from pyseq2500.tiltstage import EmulatedTiltMotor, TiltStage, TiltMotor
-from pyseq2500.fpga import EmulatedFPGA, FPGA
-from pyseq2500.laser import EmulatedLaser, Laser
-from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
-from pyseq2500.camera import TDICameras, dcamCOM
 
 
 # from pyseq2500.utils import DEFAULT_CONFIG
@@ -14,96 +6,104 @@ import pytest
 import pytest_asyncio
 import asyncio
 from pathlib import Path
-from unittest.mock import patch
 
 
-@pytest_asyncio.fixture(
-    params=[
-        pytest.param("MockMicroscope", marks=pytest.mark.mock),
-        pytest.param("Microscope", marks=pytest.mark.hardware),
-    ],
-    scope="class",
-)
-async def microscope(request, fpga):
-    name = request.param
-    # Construct Microscope
-    m = Microscope(name=name)
-    if name == "MockMicroscope":
-        fcom = EmulatedFPGA(address="FPGACOM")
-        xcom = EmulatedXStage(name="XStage", address="XStageCOM")
-        ycom = EmulatedYStage(name="YStage", address="YStageCOM")
-        zcom = EmulatedZStage(name="ZStage", address="ZStageCOM")
-        tcom = EmulatedTiltMotor(name="TiltStage", address="FPGA")
-        glcom = EmulatedLaser(name="GreenLaser", address="LaserCOM")
-        rlcom = EmulatedLaser(name="RedLaser", address="LaserCOM")
-        gfwcom = EmulatedOptics(name="GreenFilterWheel", address="FPGA")
-        rfwcom = EmulatedOptics(name="RedFilterWheel", address="FPGA")
-        ecom = EmulatedOptics(name="EmissionFilter", address="FPGA")
-        scom = EmulatedOptics(name="Shutter", address="FPGA")
-        dcam = dcamCOM(emulated=True)
+# @pytest_asyncio.fixture(
+#     params=[
+#         pytest.param("MockMicroscope", marks=pytest.mark.mock),
+#         pytest.param("Microscope", marks=pytest.mark.hardware),
+#     ],
+#     scope="class",
+# )
+# async def microscope(request, fpga):
+#     name = request.param
+#     # Construct Microscope
+#     m = Microscope()
+#     if name == "MockMicroscope":
+#         fcom = EmulatedFPGA(address="FPGACOM")
+#         xcom = EmulatedXStage(name="XStage", address="XStageCOM")
+#         ycom = EmulatedYStage(name="YStage", address="YStageCOM")
+#         zcom = EmulatedZStage(name="ZStage", address="ZStageCOM")
+#         tcom = EmulatedTiltMotor(name="TiltStage", address="FPGA")
+#         glcom = EmulatedLaser(name="GreenLaser", address="LaserCOM")
+#         rlcom = EmulatedLaser(name="RedLaser", address="LaserCOM")
+#         gfwcom = EmulatedOptics(name="GreenFilterWheel", address="FPGA")
+#         rfwcom = EmulatedOptics(name="RedFilterWheel", address="FPGA")
+#         ecom = EmulatedOptics(name="EmissionFilter", address="FPGA")
+#         scom = EmulatedOptics(name="Shutter", address="FPGA")
+#         dcam = dcamCOM(emulated=True)
 
-        instruments = {
-            "FPGA": FPGA(com=fcom),
-            "XStage": XStage(name="XStage", com=xcom),
-            "YStage": YStage(name="YStage", com=ycom),
-            "ZStage": ZStage(name="ZStage", com=zcom),
-            "TiltStage": TiltStage(name="TiltStage", com=tcom),
-            "Lasers": {
-                "green": Laser(name="GreenLaser", com=glcom, color="green"),
-                "red": Laser(name="RedLaser", com=rlcom, color="red"),
-            },
-            "FilterWheels": {
-                "green": FilterWheel(name="GreenFilterWheel", com=gfwcom),
-                "red": FilterWheel(name="RedFilterWheel", com=rfwcom),
-            },
-            "EmissionFilter": EmissionFilter(name="EmissionFilter", com=ecom),
-            "Shutter": Shutter(name="Shutter", com=scom),
-            "Camera": TDICameras(com=dcam),
-        }
+#         instruments = {
+#             "FPGA": FPGA(com=fcom),
+#             "XStage": XStage(name="XStage", com=xcom),
+#             "YStage": YStage(name="YStage", com=ycom),
+#             "ZStage": ZStage(name="ZStage", com=zcom),
+#             "TiltStage": TiltStage(name="TiltStage", com=tcom),
+#             "Lasers": {
+#                 "green": Laser(name="GreenLaser", com=glcom, color="green"),
+#                 "red": Laser(name="RedLaser", com=rlcom, color="red"),
+#             },
+#             "FilterWheels": {
+#                 "green": FilterWheel(name="GreenFilterWheel", com=gfwcom),
+#                 "red": FilterWheel(name="RedFilterWheel", com=rfwcom),
+#             },
+#             "EmissionFilter": EmissionFilter(name="EmissionFilter", com=ecom),
+#             "Shutter": Shutter(name="Shutter", com=scom),
+#             "Camera": TDICameras(com=dcam),
+#         }
 
-        # Emulated coms for 3 motors
-        coms = {}
-        for i in range(1, 4):
-            coms[i] = EmulatedTiltMotor(name=f"TiltMotor{i}", address="FPGA")
-            await coms[i].connect()
-        # Assign emulated coms to fake stage motors
-        for id, com in coms.items():
-            instruments["TiltStage"].tilts[id] = TiltMotor(
-                name=f"TiltMotor{id}", com=com
-            )
+#         # Emulated coms for 3 motors
+#         coms = {}
+#         for i in range(1, 4):
+#             coms[i] = EmulatedTiltMotor(name=f"TiltMotor{i}", address="FPGA")
+#             await coms[i].connect()
+#         # Assign emulated coms to fake stage motors
+#         for id, com in coms.items():
+#             instruments["TiltStage"].tilts[id] = TiltMotor(
+#                 name=f"TiltMotor{id}", com=com
+#             )
 
-        m.instruments = instruments
-    else:
-        # Attach fpga com fixture
-        fpga_instruments = [
-            "FPGA",
-            "ZStage",
-            "TiltStage",
-            "EmissionFilter",
-            "Shutter",
-        ]
-        for fi in fpga_instruments:
-            m.instruments[fi].com = fpga
-        for color in ["green", "red"]:
-            m.instruments["FilterWheels"][color].com = fpga
+#         m.instruments = instruments
+#         m.name = "MockMicroscope"
+#     else:
+#         # Attach fpga com fixture
+#         fpga_instruments = [
+#             "FPGA",
+#             "ZStage",
+#             "TiltStage",
+#             "EmissionFilter",
+#             "Shutter",
+#         ]
+#         for fi in fpga_instruments:
+#             m.instruments[fi].com = fpga
+#         for color in ["green", "red"]:
+#             m.instruments["FilterWheels"][color].com = fpga
 
-    # Start async worker
-    m.start()
+#     # Start async worker
+#     m.start()
 
-    await m._connect()
-    await m._configure({})
+#     await m._connect()
+#     await m._configure({})
 
-    # Do tests
-    yield m
+#     # Do tests
+#     yield m
 
-    # Shutdown instruments
-    await m._shutdown()
+#     # Shutdown instruments
+#     await m._shutdown()
 
-    # Shutdown async worker gracefully
-    try:
-        m._worker_task.cancel()
-    except asyncio.CancelledError:
-        await m._worker_task
+#     # Shutdown async worker gracefully
+#     try:
+#         m._worker_task.cancel()
+#     except asyncio.CancelledError:
+#         await m._worker_task
+
+# async def test_px_to_step(self, microscope: Microscope, fc_A_roi):
+#     """Test pixel to step conversion."""
+
+#     x_step, y_step = microscope.px_to_step(100, 200, fc_A_roi.stage.model_dump())
+
+#     assert isinstance(x_step, int)
+#     assert isinstance(y_step, int)
 
 
 @pytest.mark.microscope
@@ -129,6 +129,14 @@ class TestMicroscope:
             all_status.append(status)
         assert all(all_status)
 
+    async def test_px_to_step(self, microscope: Microscope, fc_A_roi):
+        """Test pixel to step conversion."""
+
+        x_step, y_step = microscope.px_to_step(100, 200, fc_A_roi)
+
+        assert isinstance(x_step, int)
+        assert isinstance(y_step, int)
+
     async def test_move(self, microscope: Microscope, fc_A_roi):
         x = fc_A_roi.stage.x_init
         y = fc_A_roi.stage.y_init
@@ -147,24 +155,28 @@ class TestMicroscope:
         )
         assert all(status)
 
-    async def test_scan(self, microscope: Microscope, fc_A_roi):
+    async def test_scan(self, microscope: Microscope, fc_A_roi, mocker):
         x = fc_A_roi.stage.x_init
         z = fc_A_roi.stage.z_init
         name = fc_A_roi.name
-        im_name = f"s{name}_x{x}_z{z}"
         image_dir = Path(fc_A_roi.image.image_dir)
 
         if microscope.name == "MockMicroscope":
-            with patch.object(microscope.Camera, "save_image") as mock_save_image:
-                await microscope._scan(fc_A_roi)
-                mock_save_image.assert_called_once()
-                args, kwargs = mock_save_image.call_args
-                assert args[0] == im_name
-                assert args[1] == image_dir
+            mock_save_image = mocker.patch.object(microscope.Camera, "save_image")
+            await microscope._scan(fc_A_roi)
+            assert mock_save_image.call_count == fc_A_roi.stage.nx
+            for n in range(fc_A_roi.stage.nx):
+                x_pos = n * fc_A_roi.stage.x_step + x
+                im_name = f"s{name}_x{x_pos}_z{z}"
+                assert mock_save_image.call_args_list[n].args[0] == im_name
+                assert mock_save_image.call_args_list[n].args[1] == image_dir
         else:
             await microscope._scan(fc_A_roi)
-            written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
-            assert len(written_files) == 4
+            for n in range(fc_A_roi.stage.nx):
+                x_pos = n * fc_A_roi.stage.x_step + x
+                im_name = f"s{name}_x{x_pos}_z{z}"
+                written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
+                assert len(written_files) == 4
 
     async def test_focus_stack(self, microscope: Microscope):
         focus_stack = await microscope._focus_stack(2000, 62000, 200)

@@ -1,5 +1,5 @@
 from pyseq_core.base_system import BaseMicroscope, check_name
-from pyseq_core.base_protocol import ROIFactory, OpticsParams
+from pyseq_core.base_protocol import BaseROI, OpticsParams
 
 from pyseq2500.xstage import XStage
 from pyseq2500.ystage import YStage
@@ -15,16 +15,13 @@ from pyseq2500.utils import DEFAULT_CONFIG
 import logging
 import asyncio
 from attrs import define, field
-from typing import Type, Union, Literal, Optional
+from typing import Union, Optional, Tuple
 from math import ceil
 from functools import cached_property
 from pathlib import Path
 import numpy as np
 
 LOGGER = logging.getLogger("PySeq")
-
-ROI = ROIFactory.factory(DEFAULT_CONFIG)
-ROIType = Type[ROI]
 
 
 @define
@@ -107,7 +104,7 @@ class Microscope(BaseMicroscope):
     @check_name
     async def _capture(
         self,
-        roi: Optional[ROIType] = None,
+        roi: Optional[BaseROI] = None,
         name: str = "",
         y_init: Optional[int] = None,
         y_last: Optional[int] = None,
@@ -183,7 +180,7 @@ class Microscope(BaseMicroscope):
     @check_name
     async def _z_stack(
         self,
-        roi: ROIType = None,
+        roi: Optional[BaseROI] = None,
         name: str = "",
         z_init: int = -1,
         z_last: int = -1,
@@ -215,7 +212,7 @@ class Microscope(BaseMicroscope):
             await self._capture(roi, name=f"{name}_z{z}", reset_y=reset_y, **kwargs)
 
     @check_name
-    async def _scan(self, roi: ROIType = None, name: str = "", **kwargs):
+    async def _scan(self, roi: Optional[BaseROI] = None, name: str = "", **kwargs):
         """Perform a scan over the specified region of interest (ROI)."""
 
         if roi is not None:
@@ -235,7 +232,7 @@ class Microscope(BaseMicroscope):
             await self.XStage.move(x)
             await self._z_stack(roi, name=f"s{name}_x{x}", **kwargs)
 
-    async def _expose_scan(self, roi: ROIType, duration: Union[float, int]):
+    async def _expose_scan(self, roi: BaseROI, duration: Union[float, int]):
         """Scan over the specified region of interest (ROI) with laser."""
         pass
 
@@ -243,7 +240,7 @@ class Microscope(BaseMicroscope):
         self,
         x: int = -1,
         y: Union[int, None] = None,
-        z: int = -1,
+        z: Union[int, None] = None,
         tilt1: int = -1,
         tilt2: int = -1,
         tilt3: int = -1,
@@ -260,7 +257,7 @@ class Microscope(BaseMicroscope):
         if y is not None:
             _.append(self.YStage.move(y))
             msg += f" y={y}"
-        if z > 0:
+        if z is not None:
             _.append(self.ZStage.move(z))
             msg += f" z={z}"
 
@@ -277,12 +274,20 @@ class Microscope(BaseMicroscope):
         await asyncio.gather(*_)
 
     async def _focus_stack(
-        self, z_init: int, z_last: int, n_frames: int = 0, velocity: float = 0.0
+        self,
+        z_init: Optional[int] = None,
+        z_last: Optional[int] = None,
+        n_frames: int = 0,
+        velocity: float = 0.0,
     ):
         if n_frames == 0:
             n_frames = DEFAULT_CONFIG["focus"]["n_frames"]
         if velocity == 0.0:
             velocity = DEFAULT_CONFIG["focus"]["velocity"]
+        if z_init is None:
+            z_init = self.ZStage.config["focus_start"]
+        if z_last is None:
+            z_last = self.ZStage.config["focus_stop"]
 
         # Setup camera, move objective to initial position and set velocity
         # of objective to move during capture.
@@ -330,27 +335,26 @@ class Microscope(BaseMicroscope):
 
         return focus_stack
 
-    async def _set_parameters(
-        self, image_params: OpticsParams, mode: Literal["image", "focus", "expose"]
-    ):
+    async def _set_parameters(self, params: OpticsParams):
         """Async set the parameters for the ROI."""
+
+        params = params.model_dump()
 
         _ = []
         for color in self.Lasers:
-            _.append(self.Lasers[color].set_power(image_params.power.get(color)))
-            _.append(
-                self.FilterWheels[color].set_filter(image_params.filter.get(color))
-            )
-        _.append(self.Camera.set_exposure(image_params.exposure))
+            _.append(self.Lasers[color].set_power(params["power"][color]))
+            _.append(self.FilterWheels[color].set_filter(params["filter"][color]))
+        if "exposure" in params:
+            _.append(self.Camera.set_exposure(params["exposure"]))
         await asyncio.gather(*_)
 
-    async def _find_focus(self, roi: ROIType):
+    async def _find_focus(self, roi: BaseROI):
         """Async set the parameters for the ROI."""
 
-        # Setup out of focus scan to find FOVs to focus on
+        # Setup out of focus scan to find FOVs to focus ons
         setup = [
             self._move(**roi.stage.model_dump()),
-            self._set_parameters(roi.focus.optics, mode="focus"),
+            self._set_parameters(roi.focus.optics),
         ]
         await asyncio.gather(*setup)
 
@@ -367,4 +371,34 @@ class Microscope(BaseMicroscope):
         # Reset X & Y stage to initial position after finding focus
         # Save Z stage focus position to `ROI.focus.z_focus`
         # Move Z stage to `ROI.focus.z_focus`
-        pass
+        # pass
+
+    def px_to_step(
+        self, px_row: int, px_col: int, roi: BaseROI, scale: int = 1
+    ) -> Tuple[int, int]:
+        """Convert pixel coordinates to stage step coordinates.
+
+        Args:
+            px_row: Pixel row
+            px_col: Pixel column
+            stage_info: Stage position information from ROI
+            scale: Image scale factor
+
+        Returns:
+            Tuple of (x_step, y_step)
+        """
+        # Get reference positions
+        x_init = roi.stage.x_init
+        y_init = roi.stage.y_init
+
+        # Scaled resolutio in microns per pixel
+        px_to_um = self._config["resolution"] * scale  # um per pixel (resolution)
+
+        # Calculate offsets
+        x_offset = px_col * px_to_um * self.XStage.config["spum"]
+        y_offset = px_row * px_to_um * self.YStage.config["spum"]
+
+        x_step = int(x_init + x_offset)
+        y_step = int(y_init - y_offset)  # Y is typically inverted
+
+        return (x_step, y_step)

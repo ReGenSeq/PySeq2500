@@ -4,6 +4,7 @@
 # Software settings should go in default.toml
 name: Test                                                                      # name of sequencer
 Test:                                                                           # settings for a specific sequencer
+  model: HiSeq2500
   flowcells: ['A', 'B']                                                         # list of flow cell names 
   FlowCellA:
     inlet_port: 
@@ -115,8 +116,8 @@ Test:                                                                           
       prefix: "1"
       suffix: "\r\n"   
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    origin: -180000                                                            # reference step for flow cells, used in `custom_roi_factory`
-    step: *y_step                                                                   # line bundle height for TDI imaging
+    origin: -180000                                                             # reference step for flow cells, used in `custom_roi_factory`
+    step: *y_step                                                               # line bundle height for TDI imaging
     position:
       min_val: -7000000
       max_val: 7000000
@@ -160,7 +161,9 @@ Test:                                                                           
     velocity: 
       min_val: 0.1
       max_val: 5
-      units: "mms/s"
+      units: "mm/s"
+    focus_start: 2000
+    focus_stop: 62000
   RedLaser: 
     com:
       baudrate: 9600
@@ -228,3 +231,4 @@ Test:                                                                           
       green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
       red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`
       emission: *emission_filter
+
