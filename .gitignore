@@ -214,8 +214,12 @@ local_notebooks
 local_scripts
 personal_notebooks
 personal_scripts
-*.DS_Store
+.DS_Store
 
 # setuptools_scm package version
 *_version.py
+
+# AI helpers
+.qwen
+CLAUDE.md
 
