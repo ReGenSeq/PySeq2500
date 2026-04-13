@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import xarray as xr
 import dask.array as da
 
-from pyseq2500.autofocus import Autofocus, autofocus, gaussian, res_gaussian
+from pyseq2500.autofocus import Autofocus, autofocus
 from pre.image_analysis import HiSeqImages
+from xarray import DataArray
 
 
 @pytest.fixture
@@ -38,6 +39,54 @@ def af_with_rough_scan(af, rough_scan_hiseq):
     return af
 
 
+@pytest_asyncio.fixture
+def af_with_rough_scan_mocked(
+    af_with_rough_scan, summed_rough_scan_image, mock_sum_images
+):
+    """Create Autofocus instance with mocked sum_images for faster testing.
+
+    Uses pre-computed summed image to avoid expensive sum_images computation
+    in every test. Ideal for tests that call find_candidate_fovs multiple times.
+    """
+    af_with_rough_scan.sum_image = summed_rough_scan_image
+
+    return af_with_rough_scan
+
+
+@pytest_asyncio.fixture(scope="module")
+def synthetic_focus_stack() -> DataArray:
+    # Create a synthetic focus stack with object dtype containing image-like arrays
+    n_frames = 200
+    channels = [558, 610, 687, 740]
+    n_row = 16
+    n_col = 64
+
+    n_channels = len(channels)
+    focus_stack = np.empty((n_channels, n_frames), dtype=object)
+
+    # Create Gaussian-like focus metric
+    z_positions = np.arange(n_frames)
+    focus_metric = np.exp(-((z_positions - 100) ** 2) / (2 * 20**2))
+
+    # Each "image" has texture with contrast proportional to focus metric
+    # Use a fixed pattern that varies spatially so Sobel detects edges
+    np.random.seed(42)
+    base_pattern = np.random.randint(0, 100, (n_row, n_col), dtype=np.uint16)
+
+    for i in range(n_channels):
+        for j in range(n_frames):
+            # Scale pattern by focus metric to simulate focus variation
+            focus_stack[i, j] = (base_pattern * focus_metric[j]).astype(np.uint16)
+
+    xr_focus_stack = DataArray(
+        focus_stack.tolist(),
+        dims=["channel", "z", "row", "col"],
+        coords={"channel": channels, "z": range(n_frames)},
+    )
+
+    return xr_focus_stack
+
+
 @pytest.mark.asyncio
 class TestAutofocus:
     """Test Autofocus class."""
@@ -57,29 +106,10 @@ class TestAutofocus:
 
         assert result is None
 
-    async def test_find_best_z_valid_stack(self, af):
+    async def test_find_best_z_valid_stack(self, af, synthetic_focus_stack):
         """Test find_best_z with valid focus stack."""
 
-        # Create a synthetic focus stack with object dtype containing image-like arrays
-        n_frames = 200
-        n_channels = 2
-        focus_stack = np.empty((n_frames, n_channels), dtype=object)
-
-        # Create Gaussian-like focus metric
-        z_positions = np.arange(n_frames)
-        focus_metric = np.exp(-((z_positions - 100) ** 2) / (2 * 20**2))
-
-        # Each "image" has texture with contrast proportional to focus metric
-        # Use a fixed pattern that varies spatially so Sobel detects edges
-        np.random.seed(42)
-        base_pattern = np.random.randint(0, 100, (16, 64), dtype=np.uint16)
-
-        for i in range(n_frames):
-            for j in range(n_channels):
-                # Scale pattern by focus metric to simulate focus variation
-                focus_stack[i, j] = (base_pattern * focus_metric[i]).astype(np.uint16)
-
-        result = af.find_best_z(focus_stack)
+        result = af.find_best_z(synthetic_focus_stack)
 
         assert result is not None
         assert isinstance(result, int)
@@ -113,20 +143,11 @@ class TestAutofocus:
         assert result is not None
         assert len(result) == 2  # slope and intercept
 
-    async def test_format_focus_data(self, af):
+    async def test_format_focus_data(self, af, synthetic_focus_stack):
         """Test focus data formatting."""
 
-        # Create test focus stack with object dtype containing image-like arrays
-        n_frames = 100
-        n_channels = 4
-        focus_stack = np.empty((n_frames, n_channels), dtype=object)
-        for i in range(n_frames):
-            for j in range(n_channels):
-                focus_stack[i, j] = np.random.randint(
-                    0, 1000, (16, 64), dtype=np.uint16
-                )
-
-        result = af.format_focus_data(focus_stack)
+        n_channels, n_frames = synthetic_focus_stack.shape[0:2]
+        result = af.format_focus_data(synthetic_focus_stack)
 
         assert result is not False
         assert result.shape == (n_frames, n_channels)
@@ -138,13 +159,20 @@ class TestAutofocus:
 
         # Create focus stack with zero images
         n_frames = 100
-        n_channels = 4
+        channels = [558, 610, 687, 740]
+
+        n_channels = len(channels)
         focus_stack = np.empty((n_frames, n_channels), dtype=object)
         for i in range(n_frames):
             for j in range(n_channels):
                 focus_stack[i, j] = np.zeros((16, 64), dtype=np.uint16)
+        xr_focus_stack = DataArray(
+            focus_stack.tolist(),
+            dims=["z", "channel", "row", "col"],
+            coords={"channel": channels, "z": range(n_frames)},
+        )
 
-        result = af.format_focus_data(focus_stack)
+        result = af.format_focus_data(xr_focus_stack)
 
         assert result is False
 
@@ -161,6 +189,7 @@ class TestAutofocus:
         with pytest.raises(ValueError, match="No images available"):
             af.find_candidate_fovs()
 
+    @pytest.mark.mock
     async def test_evaluate_fov(self, af, fc_A_roi):
         """Test FOV evaluation with real focus stack data from Zenodo."""
 
@@ -187,47 +216,6 @@ class TestAutofocusFunction:
 
             assert result == 5000
             mock_run.assert_called_once()
-
-
-class TestGaussianFunctions:
-    """Test Gaussian fitting functions."""
-
-    def test_gaussian_single_peak(self):
-        """Test single Gaussian."""
-        x = np.linspace(-10, 10, 100)
-        # Parameters: amp, cen, sigma
-        params = [1.0, 0.0, 1.0]
-
-        result = gaussian(x, params)
-
-        assert len(result) == 100
-        assert np.max(result) == pytest.approx(1.0 / np.sqrt(2 * np.pi), rel=0.01)
-        assert result[np.argmax(result)] > 0
-
-    def test_gaussian_multiple_peaks(self):
-        """Test multiple Gaussians."""
-        x = np.linspace(-10, 10, 100)
-        # Two peaks: amp1, amp2, cen1, cen2, sigma1, sigma2
-        params = [1.0, 0.5, -3.0, 3.0, 1.0, 1.0]
-
-        result = gaussian(x, params)
-
-        assert len(result) == 100
-        # Should have two peaks
-        peaks = np.where(np.diff(np.sign(np.diff(result))) < 0)[0] + 1
-        assert len(peaks) >= 2
-
-    def test_res_gaussian(self):
-        """Test Gaussian residuals."""
-        x = np.linspace(-5, 5, 50)
-        params = [1.0, 0.0, 1.0]
-        y_obs = gaussian(x, params) + np.random.normal(0, 0.1, 50)
-
-        residuals = res_gaussian(params, x, y_obs)
-
-        assert len(residuals) == 50
-        # Mean residual should be close to zero
-        assert np.mean(residuals) == pytest.approx(0, abs=0.2)
 
 
 def make_synthetic_images(signal_low: int, signal_high: int):
@@ -427,10 +415,10 @@ class TestRoughScanRealDataFOVIdentification:
     an out-of-focus rough scan using real test data downloaded via pooch.
     """
 
-    def test_find_candidate_fovs_with_real_data(self, af_with_rough_scan):
+    def test_find_candidate_fovs_with_real_data(self, af_with_rough_scan_mocked):
         """Test finding candidate FOVs from real RoughScan data."""
         # Find candidate FOVs
-        candidates = af_with_rough_scan.find_candidate_fovs(n_candidates=50)
+        candidates = af_with_rough_scan_mocked.find_candidate_fovs(n_candidates=50)
 
         # Verify results
         assert candidates is not None
@@ -446,7 +434,7 @@ class TestRoughScanRealDataFOVIdentification:
             "Column coordinates should be non-negative"
         )
 
-        n_rows, n_cols = af_with_rough_scan.rough_ims.im.shape[
+        n_rows, n_cols = af_with_rough_scan_mocked.rough_ims.im.shape[
             1:
         ]  # Skip channel dimension
         assert np.all(candidates[:, 0] < n_rows), "Row coordinates within image height"
@@ -458,11 +446,11 @@ class TestRoughScanRealDataFOVIdentification:
         # unique_candidates = np.unique(candidates, axis=0)
         # assert len(unique_candidates) == len(candidates)
 
-    def test_find_candidate_fovs_different_counts(self, af_with_rough_scan):
+    def test_find_candidate_fovs_different_counts(self, af_with_rough_scan_mocked):
         """Test FOV detection with different candidate counts."""
 
         for n_candidates in [10, 25, 50, 100]:
-            candidates = af_with_rough_scan.find_candidate_fovs(
+            candidates = af_with_rough_scan_mocked.find_candidate_fovs(
                 n_candidates=n_candidates
             )
 
@@ -519,15 +507,15 @@ class TestRoughScanRealDataFOVIdentification:
     #         assert row_spread > 0 or col_spread > 0, \
     #             "FOVs should not all be at the exact same location"
 
-    def test_scale_parameter_affects_fov_count(self, af_with_rough_scan):
+    def test_scale_parameter_affects_fov_count(self, af_with_rough_scan_mocked):
         """Test that scale parameter affects number of FOVs found."""
 
         # Test with different scale values
-        af_with_rough_scan.scale = 1
-        fovs_scale_1 = af_with_rough_scan.find_candidate_fovs(n_candidates=50)
+        af_with_rough_scan_mocked.scale = 1
+        fovs_scale_1 = af_with_rough_scan_mocked.find_candidate_fovs(n_candidates=50)
 
-        af_with_rough_scan.scale = 2
-        fovs_scale_2 = af_with_rough_scan.find_candidate_fovs(n_candidates=50)
+        af_with_rough_scan_mocked.scale = 2
+        fovs_scale_2 = af_with_rough_scan_mocked.find_candidate_fovs(n_candidates=50)
 
         # Both should return valid arrays
         assert isinstance(fovs_scale_1, np.ndarray)

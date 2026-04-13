@@ -184,3 +184,40 @@ class TestMicroscope:
 
     async def test_find_focus(self, microscope: Microscope, fc_A_roi):
         assert await microscope._find_focus(fc_A_roi)
+
+    async def test_tilt_stack(
+        self,
+        microscope: Microscope,
+        fc_A_roi,
+        mocker,
+        tilt_init=21500,
+        tilt_last=22000,
+        tilt_step=500,
+    ):
+        x = fc_A_roi.stage.x_init
+        name = fc_A_roi.name
+        image_dir = Path(fc_A_roi.image.image_dir)
+
+        if microscope.name == "MockMicroscope":
+            mock_save_image = mocker.patch.object(microscope.Camera, "save_image")
+            await microscope._tilt_stack(
+                fc_A_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
+            )
+            c = 0
+            for n in range(fc_A_roi.stage.nx):
+                for t in range(tilt_init, tilt_last, tilt_step):
+                    x_pos = n * fc_A_roi.stage.x_step + x
+                    im_name = f"s{name}_x{x_pos}_z{t}"
+                    assert mock_save_image.call_args_list[c].args[0] == im_name
+                    assert mock_save_image.call_args_list[c].args[1] == image_dir
+                    c += 1
+        else:
+            await microscope._tilt_stack(
+                fc_A_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
+            )
+            for n in range(fc_A_roi.stage.nx):
+                for n, t in enumerate(range(tilt_init, tilt_last, tilt_step)):
+                    x_pos = n * fc_A_roi.stage.x_step + x
+                    im_name = f"s{name}_x{x_pos}_z{t}"
+                    written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
+                    assert len(written_files) == 4

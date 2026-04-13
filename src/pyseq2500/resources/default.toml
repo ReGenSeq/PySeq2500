@@ -51,9 +51,10 @@ filter.green = "home"
 
 [focus]
 # Table for focusing parameters 
-routine = "full once"                                                        # Autofocus routine to use, see auto_focus_routines for all options
+routine = "full once"                                                           # Autofocus routine to use, see auto_focus_routines for all options
 n_frames = 200                                                                  # Number of frames to take in objective stack
 velocity = 0.1                                                                  # Velocity (mm/s) to move objective in focus stack, 
+tolerance = 5.0                                                                 # microns, thickness of section / ROI
 [focus.optics]
 # Table for focusing optical parameters
 # See `optics` table for options

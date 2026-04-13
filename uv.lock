@@ -2847,8 +2847,8 @@ dev = [
 
 [[package]]
 name = "pyseq-image"
-version = "0.1.dev118+ga30628277"
-source = { git = "https://github.com/nygctech/pyseq-image.git#a306282774b5b56eaace066b2281dcafb9564b20" }
+version = "0.1.dev123+g6f4957462.d20260411"
+source = { editable = "../pyseq-image" }
 dependencies = [
     { name = "dask" },
     { name = "dask-image" },
@@ -2860,6 +2860,23 @@ dependencies = [
     { name = "xarray" },
     { name = "zarr" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "dask" },
+    { name = "dask-image" },
+    { name = "numpy" },
+    { name = "ome-types" },
+    { name = "ome-zarr" },
+    { name = "pytest", marker = "extra == 'testing'" },
+    { name = "pytest-cov", marker = "extra == 'testing'" },
+    { name = "scikit-image" },
+    { name = "tabulate" },
+    { name = "tox", marker = "extra == 'testing'" },
+    { name = "xarray" },
+    { name = "zarr" },
+]
+provides-extras = ["testing"]
 
 [[package]]
 name = "pyseq2500"
@@ -2903,7 +2920,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.1" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pyseq-core", editable = "../pyseq_core" },
-    { name = "pyseq-image", git = "https://github.com/nygctech/pyseq-image.git" },
+    { name = "pyseq-image", editable = "../pyseq-image" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "scikit-image", specifier = ">=0.21.0" },
     { name = "scikit-learn", specifier = ">=1.8.0" },

@@ -12,6 +12,9 @@ from pyseq2500.fpga import FPGA
 from pyseq2500.com import COM_DICT
 from pyseq2500.utils import DEFAULT_CONFIG
 
+from pre.image_analysis import HiSeqImages
+from xarray import DataArray
+
 import logging
 import asyncio
 from attrs import define, field
@@ -111,7 +114,6 @@ class Microscope(BaseMicroscope):
         n_frames: int = 0,
         reset_y: bool = False,
         image_dir: Union[str, Path] = ".",
-        **kwargs,
     ):
         """Capture an image and save it to filename."""
 
@@ -177,6 +179,49 @@ class Microscope(BaseMicroscope):
 
         return frame_count == n_frames
 
+    def tilt_stack(self, roi: BaseROI) -> int:
+        """Acquire tilt stack from the specified region of interest (ROI)."""
+        description = f"Image tilt stage stack of {roi.name}"
+        return self.add_task(description, self._tilt_stack, roi)
+
+    @check_name
+    async def _tilt_stack(
+        self,
+        roi: Optional[BaseROI] = None,
+        name: str = "",
+        tilt_init: int = 0,
+        tilt_last: int = 0,
+        tilt_step: int = 1,
+        **kwargs,
+    ):
+        """Scan over ROI at different tilt stage positions"""
+
+        if roi is None:
+            roi = BaseROI(**kwargs)
+
+        LOGGER.info(f"Microscope:: Moving to {roi.name} initial position")
+        # Move to initial position
+        y_init = roi.stage.y_init
+        x_init = roi.stage.x_init
+        x_last = roi.stage.x_last
+        x_step = roi.stage.x_step
+        await self._move(x=x_init, y=y_init)
+
+        # Loop over x tiles
+        _x = range(x_init, x_last, x_step)
+        nx = len(_x)
+        for i, x in enumerate(_x):
+            LOGGER.info(f"Scanning {name} tile {i + 1}/{nx}")
+            await self.XStage.move(x)
+            tilt_pos = range(tilt_init, tilt_last, tilt_step)
+            nt = len(tilt_pos)
+            for i, _t in enumerate(tilt_pos):
+                await self.TiltStage.move(_t)
+                reset_y = i < nt - 1
+                await self._capture(
+                    roi, name=f"s{name}_x{x}_z{_t}", reset_y=reset_y, **kwargs
+                )
+
     @check_name
     async def _z_stack(
         self,
@@ -215,20 +260,22 @@ class Microscope(BaseMicroscope):
     async def _scan(self, roi: Optional[BaseROI] = None, name: str = "", **kwargs):
         """Perform a scan over the specified region of interest (ROI)."""
 
-        if roi is not None:
-            LOGGER.info(f"Microscope:: Moving to {roi.name} initial position")
-            # Move to initial position
-            y_init = roi.stage.y_init
-            x_init = roi.stage.x_init
-            x_last = roi.stage.x_last
-            x_step = roi.stage.x_step
-            await self._move(x=x_init, y=y_init)
+        if roi is None:
+            roi = BaseROI(**kwargs)
+
+        LOGGER.info(f"Microscope:: Moving to {roi.name} initial position")
+        # Move to initial position
+        y_init = roi.stage.y_init
+        x_init = roi.stage.x_init
+        x_last = roi.stage.x_last
+        x_step = roi.stage.x_step
+        await self._move(x=x_init, y=y_init)
 
         # Loop over x tiles
         _x = range(x_init, x_last, x_step)
         nx = len(_x)
         for i, x in enumerate(_x):
-            LOGGER.info(f"Scanning {roi.name} tile {i + 1}/{nx}")
+            LOGGER.info(f"Scanning {name} tile {i + 1}/{nx}")
             await self.XStage.move(x)
             await self._z_stack(roi, name=f"s{name}_x{x}", **kwargs)
 
@@ -273,13 +320,28 @@ class Microscope(BaseMicroscope):
         LOGGER.debug(msg)
         await asyncio.gather(*_)
 
+    def focus_z_positions(self, z_init: int, z_last: int, n_frames: int) -> np.ndarray:
+        """Calculate the z position of each frame for a focus stack."""
+
+        velocity = self.ZStage.velocity  # mm/s
+        spum = self.ZStage.spum  # step/um
+
+        velocity = velocity * 1000 * spum  # step/s
+        for cam in self.Camera:
+            interval = cam.getFrameInterval()  # s/frame
+            z = np.arange(n_frames) * interval * velocity  # step
+            z_pos = (z + z_init).clip(max=z_last)
+            break
+
+        return z_pos
+
     async def _focus_stack(
         self,
         z_init: Optional[int] = None,
         z_last: Optional[int] = None,
         n_frames: int = 0,
         velocity: float = 0.0,
-    ):
+    ) -> DataArray:
         if n_frames == 0:
             n_frames = DEFAULT_CONFIG["focus"]["n_frames"]
         if velocity == 0.0:
@@ -294,10 +356,11 @@ class Microscope(BaseMicroscope):
         setup = []
         setup.append(self.Camera.check_free())
         setup.append(self.Camera.allocate("AREA", n_frames))
-        setup.append(self.ZStage.set_velocity(self.ZStage.max_velocity))
-        setup.append(self.ZStage.move(z_init))
+        setup.append(self.ZStage.set_velocity(self.ZStage.min_velocity))
+        setup.append(self.ZStage.move(min(self.ZStage.min_position, z_init)))
         await asyncio.gather(*setup)
         await self.ZStage.set_velocity(velocity)
+        z_pos = self.focus_z_positions(z_init, z_last, n_frames)
 
         # Update limits that were previously based on estimates
         # obj.update_focus_limits(cam_interval = cam1.getFrameInterval(),
@@ -333,7 +396,10 @@ class Microscope(BaseMicroscope):
 
         await self.Camera.freeFrames()  # Free camera memory
 
-        return focus_stack
+        hs_focus_stack = HiSeqImages.open_objstack(focus_stack, z=z_pos)
+        hs_focus_stack.correct_background()
+
+        return hs_focus_stack.im
 
     async def _set_parameters(self, params: OpticsParams):
         """Async set the parameters for the ROI."""

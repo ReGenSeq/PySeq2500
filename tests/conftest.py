@@ -20,6 +20,8 @@ from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptic
 from pyseq2500.camera import TDICameras, dcamCOM
 from pyseq_core.base_protocol import BaseROI
 
+from pre import image_analysis as ia
+
 
 # Base Test FPGA
 @pytest_asyncio.fixture(scope="session")
@@ -114,19 +116,16 @@ def focus_stack_data():
     channel_data = {ch: [] for ch in [687, 558, 610, 740]}
 
     # Find and load all tiff files, sorted by channel and frame
-    tiff_files = sorted(extract_dir.glob("*.tiff"))
+    channel_data = {ch: [] for ch in [687, 558, 610, 740]}
+    tiff_files = list(extract_dir.glob("*.tiff"))
+    n_frames = int(len(tiff_files) / 4)
 
-    for tiff_file in tiff_files:
-        # Extract channel from filename (e.g., c558_f0.tiff)
-        filename = tiff_file.name
-        for ch in channel_data.keys():
-            if f"c{ch}_" in filename:
-                img = imageio.imread(str(tiff_file))
-                channel_data[ch].append(img)
-                break
-
-    # Determine number of frames (assuming all channels have same number)
-    n_frames = len(channel_data[687])
+    # Find and load all tiff files, sorted by channel and frame
+    for ch in channel_data.keys():
+        for f in range(156):
+            fn = f"c{ch}_f{f}.tiff"
+            img = imageio.imread(extract_dir / fn)
+            channel_data[ch].append(img)
 
     # Create focus stack arrays per camera: (n_frames, 2) with dtype=object
     # Each element is a 16x2048 uint16 array
@@ -153,13 +152,44 @@ def rough_scan_hiseq(rough_scan_data):
             - im attribute is xarray.DataArray with shape (4, ~4452, ~6143)
               channels: [558, 610, 687, 740]
     """
-    from pre import image_analysis as ia
 
     hiseq = ia.HiSeqImages.open_RoughScan(str(rough_scan_data), [".tiff", ".tif"])
     hiseq.correct_background()
     hiseq.register_channels()
 
     return hiseq
+
+
+@pytest.fixture(scope="session")
+def summed_rough_scan_image(rough_scan_hiseq):
+    """Pre-compute summed image from RoughScan data once per session.
+
+    This avoids repeatedly calling sum_images() which processes the full
+    4452x6143 pixel images and is expensive (~5-8 seconds per call).
+
+    Returns:
+        numpy.ndarray: Summed image from all channels
+    """
+
+    summed = ia.sum_images(rough_scan_hiseq.im)
+
+    return summed
+
+
+@pytest.fixture
+def mock_sum_images(monkeypatch, summed_rough_scan_image):
+    """Mock sum_images to return pre-computed result.
+
+    This avoids re-computing sum_images in every test that calls
+    find_candidate_fovs().
+    """
+
+    def mock_sum_images_func(images):
+        return summed_rough_scan_image
+
+    # Patch where sum_images is used (in autofocus module), not where it's defined
+    monkeypatch.setattr("pyseq2500.autofocus.sum_images", mock_sum_images_func)
+    return mock_sum_images_func
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -180,7 +210,7 @@ async def fc_A_roi(test_directory):
     from pyseq_core.base_protocol import CUSTOM_ROI
 
     image_fields = {"nz": 1, "image_dir": str(test_directory / "images")}
-    focus_fields = {"output": str(test_directory / "focus")}
+    focus_fields = {"output": str(test_directory / "focus"), "n_frames": 156}
     roi = CUSTOM_ROI(
         flowcell="A", LLx=17.462, LLy=35.5, URx=15.768, URy=34.252, overlap=0
     )

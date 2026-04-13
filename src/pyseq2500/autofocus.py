@@ -11,7 +11,7 @@ The autofocus routine:
 import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple, Union
-from scipy.optimize import least_squares
+from scipy.optimize import curve_fit, OptimizeWarning
 import logging
 
 from pre.image_analysis import (
@@ -20,11 +20,11 @@ from pre.image_analysis import (
     get_focus_points_partial,
     sum_images,
 )
+from xarray import DataArray
 from sklearn.linear_model import RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 
-from pyseq2500.utils import DEFAULT_CONFIG
 from pyseq_core.base_protocol import BaseROI
 
 import matplotlib
@@ -201,9 +201,11 @@ class Autofocus:
 
         # Store FOV dimensions from focus stack images for visualization
         if self.fov_shape is None and focus_stack.size > 0:
-            first_img = focus_stack[0, 0]
-            if first_img is not None:
-                self.fov_shape = first_img.shape  # (height, width)
+            self.fov_shape = focus_stack.chunks[0:2]
+
+            # first_img = focus_stack.data[0,0]
+            # if first_img is not None:
+            #     self.fov_shape = first_img.shape  # (height, width)
 
         # Find best Z position
         best_z = self.find_best_z(focus_stack)
@@ -215,7 +217,7 @@ class Autofocus:
             LOGGER.debug(f"Autofocus:: No focus found at x={x_pos}, y={y_pos}")
             return None
 
-    def format_focus_data(self, focus_stack: np.ndarray) -> Union[np.ndarray, bool]:
+    def format_focus_data(self, focus_stack: DataArray) -> Union[np.ndarray, bool]:
         """Format focus stack data for analysis using Tenengrad focus metric.
 
         Args:
@@ -228,14 +230,14 @@ class Autofocus:
         """
         from skimage.filters import sobel_v
 
-        n_frames, n_channels = focus_stack.shape
+        n_channels, n_frames = focus_stack.shape[0:2]
 
         # Calculate Tenengrad focus metric per frame per channel
         # Tenengrad = sum of squared gradients (using vertical Sobel for horizontal edges)
         focus_metric = np.zeros((n_frames, n_channels))
         for i in range(n_frames):
-            for j in range(n_channels):
-                img = focus_stack[i, j]
+            for j, ch in enumerate(focus_stack.channel):
+                img = focus_stack.sel(channel=ch).isel(z=i)
                 if img is not None and img.shape[0] >= 3 and img.shape[1] >= 3:
                     # Apply vertical Sobel filter (detects horizontal edges)
                     gradient = sobel_v(img.astype(float))
@@ -244,11 +246,12 @@ class Autofocus:
 
         # Check for valid signal
         if np.sum(focus_metric) == 0:
+            LOGGER.debug("No signal in focus stack")
             return False
 
         return focus_metric
 
-    def find_best_z(self, focus_stack: np.ndarray) -> Optional[int]:
+    def find_best_z(self, focus_stack: DataArray) -> Union[int, float, None]:
         """Find the best Z position from a focus stack.
 
         Uses mixed Gaussian fitting to find the optimal focus position.
@@ -273,103 +276,41 @@ class Autofocus:
         combined_metric = np.sum(focus_metric, axis=1)
 
         # Normalize
-        combined_metric = combined_metric / np.sum(combined_metric)
-
-        # Calculate Z steps
-        frame_interval = 0.040202
-        velocity = DEFAULT_CONFIG.get("focus", {}).get("velocity", 0.1)
-        spum = 1
-        spf = velocity * 1000 * spum * frame_interval
-        z_init = self.roi.stage.z_init if hasattr(self.roi.stage, "z_init") else 0
-        obj_steps = z_init + np.arange(len(combined_metric)) * spf
+        combined_metric = combined_metric / combined_metric.max()
 
         # Stack steps and metrics
-        formatted = np.vstack((obj_steps, combined_metric)).T
+        formatted = np.vstack((focus_stack.z.values, combined_metric)).T
+        LOGGER.debug(formatted)
 
-        # Fit mixed Gaussian to find optimal Z
-        best_z = self.fit_mixed_gaussian(formatted)
+        # # Fit lorentzian
+        best_z = self.fit_lorentzian(formatted)
 
         return best_z
 
-    def fit_mixed_gaussian(self, data: np.ndarray) -> Optional[int]:
-        """Fit mixed Gaussian to focus data and return optimal Z.
+    def fit_lorentzian(self, focus_data: np.ndarray) -> Union[int, float, None]:
+        """Fit data to lorentzian model."""
 
-        Args:
-            data: Formatted focus data [steps, metric]
+        z, focus = focus_data[:, 0], focus_data[:, 1]
 
-        Returns:
-            Optimal Z position or None if fit failed
-        """
-        max_peaks = 4
-        tolerance = 0.9
+        # Initial guesses for the optimizer
+        wid = self.roi.focus.tolerance * self.microscope.ZStage.spum
+        p0 = [np.max(focus), z[np.argmax(focus)], wid, np.min(focus)]
+        # TODO add bounds
 
-        y = data[:, 1]
-        SST = np.sum((y - np.mean(y)) ** 2)
-        R2 = 0
-
-        amp = []
-        cen = []
-        sigma = []
-
-        # Add peaks until fit reaches threshold
-        while len(amp) <= max_peaks and R2 < tolerance:
-            # Set initial guesses for normalized data
-            max_y = np.max(y)
-            amp.append(max_y)  # Amplitude should be close to max normalized value
-            index = np.argmax(y)
-            y_copy = y.copy()
-            y_copy = np.delete(y_copy, index)
-            index = np.where(data[:, 1] == max_y)[0][0]
-            cen.append(data[index, 0])
-            # Sigma: estimate from data spread (in steps)
-            sigma.append(np.std(data[:, 0]) / 10)  # Reasonable initial guess
-
-            p0 = np.array([amp, cen, sigma]).flatten()
-
-            # Set bounds
-            amp_lb = [0] * len(amp)
-            amp_ub = [np.inf] * len(amp)
-            cen_lb = [np.min(data[:, 0])] * len(cen)
-            cen_ub = [np.max(data[:, 0])] * len(cen)
-            sigma_lb = [0] * len(sigma)
-            sigma_ub = [np.inf] * len(sigma)
-
-            lo_bounds = np.array([amp_lb, cen_lb, sigma_lb]).flatten()
-            up_bounds = np.array([amp_ub, cen_ub, sigma_ub]).flatten()
-
-            # Optimize
-            results = least_squares(
-                res_gaussian,
-                p0,
-                bounds=(lo_bounds, up_bounds),
-                args=(data[:, 0], data[:, 1]),
+        # Calculate the fit
+        try:
+            popt, pcov, infodict, mesg, ier = curve_fit(
+                lorentzian, z, focus, p0=p0, full_output=True
             )
-
-            if not results.success:
-                LOGGER.debug(f"Autofocus:: Fit failed: {results.message}")
-                return None
-
-            R2 = 1 - np.sum(results.fun**2) / SST
-            LOGGER.debug(f"Autofocus:: R2={R2} with {len(amp)} peaks")
-
-            if results.success and R2 > tolerance:
-                z_range = np.arange(
-                    data[:, 0].min(),
-                    data[:, 0].max(),
-                    50,  # int(spum / 2) if "spum" in locals() else 50,
-                )
-                focus_fit = gaussian(z_range, results.x)
-                opt_z = int(z_range[np.argmax(focus_fit)])
-
-                # Check if peak is at endpoint (unreliable)
-                if opt_z in (data[:, 0].min(), data[:, 0].max()):
-                    LOGGER.debug("Autofocus:: Peak at endpoint")
-                    return None
-
-                return opt_z
-
-        LOGGER.debug("Autofocus:: Bad fit after max peaks")
-        return None
+            LOGGER.debug(f"Success: {mesg}")
+            return popt[1]
+        except ValueError as e:
+            LOGGER.error(e)
+            return None
+        except (RuntimeError, OptimizeWarning) as e:
+            LOGGER.warning(e)
+            LOGGER.warning("Falling back to largest focus metric")
+            return np.argmax(focus)
 
     def ransac_focus(self, focus_points: np.ndarray) -> Optional[Tuple[float, float]]:
         """Use RANSAC to find consensus focal plane from multiple FOVs.
@@ -841,52 +782,9 @@ class Autofocus:
     #     return (x_step, y_step)
 
 
-def gaussian(x: np.ndarray, *args) -> np.ndarray:
-    """Gaussian function for curve fitting.
-
-    Args:
-        x: X values
-        *args: Gaussian parameters [amp1, amp2, ..., cen1, cen2, ..., sigma1, sigma2, ...]
-
-    Returns:
-        Sum of Gaussians at x
-    """
-    if len(args) == 1:
-        args = args[0]
-
-    n_peaks = int(len(args) / 3)
-
-    if len(args) - n_peaks * 3 != 0:
-        raise ValueError("Unequal number of parameters")
-
-    amp = args[0:n_peaks]
-    cen = args[n_peaks : n_peaks * 2]
-    sigma = args[n_peaks * 2 : n_peaks * 3]
-
-    g_sum = np.zeros_like(x, dtype=float)
-    for i in range(len(amp)):
-        g_sum += (
-            amp[i]
-            * (1 / (sigma[i] * np.sqrt(2 * np.pi)))
-            * np.exp((-1.0 / 2.0) * (((x - cen[i]) / sigma[i]) ** 2))
-        )
-
-    return g_sum
-
-
-def res_gaussian(args: np.ndarray, xfun: np.ndarray, yfun: np.ndarray) -> np.ndarray:
-    """Gaussian residual function for curve fitting.
-
-    Args:
-        args: Gaussian parameters
-        xfun: X values
-        yfun: Y values (observed)
-
-    Returns:
-        Residuals (yfun - gaussian(xfun, args))
-    """
-    g_sum = gaussian(xfun, args)
-    return yfun - g_sum
+def lorentzian(x, amp, ctr, wid, off):
+    """Lorentzian model fot fitting focus data."""
+    return off + amp * (1 / (1 + ((x - ctr) / wid) ** 2))
 
 
 async def autofocus(microscope, roi: BaseROI) -> Optional[int]:
