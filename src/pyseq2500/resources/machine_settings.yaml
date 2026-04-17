@@ -18,6 +18,7 @@ Test:                                                                           
     resolution: 0.375                                                           # um/px
   Cameras:
     sensor_width: 2048                                                          # width of TDI line sensor in pixels
+    sensor_height: 64                                                           # height of TDI line sensor in pixels
     exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
       min_val: 0.00002
       max_val: 1.004

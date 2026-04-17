@@ -160,36 +160,41 @@ def rough_scan_hiseq(rough_scan_data):
     return hiseq
 
 
-@pytest.fixture(scope="session")
-def summed_rough_scan_image(rough_scan_hiseq):
-    """Pre-compute summed image from RoughScan data once per session.
+# @pytest.fixture(scope="session")
+# def summed_rough_scan_image(rough_scan_hiseq):
+#     """Pre-compute summed image from RoughScan data once per session.
 
-    This avoids repeatedly calling sum_images() which processes the full
-    4452x6143 pixel images and is expensive (~5-8 seconds per call).
+#     This avoids repeatedly calling sum_images() which processes the full
+#     4452x6143 pixel images and is expensive (~5-8 seconds per call).
 
-    Returns:
-        numpy.ndarray: Summed image from all channels
-    """
+#     Returns:
+#         numpy.ndarray: Summed image from all channels
+#     """
 
-    summed = ia.sum_images(rough_scan_hiseq.im)
+#     summed = ia.sum_images(rough_scan_hiseq.im)
+#     median = np.median(summed)
 
-    return summed
+#     return summed, median
 
 
-@pytest.fixture
-def mock_sum_images(monkeypatch, summed_rough_scan_image):
-    """Mock sum_images to return pre-computed result.
+# @pytest.fixture
+# def mock_sum_images(monkeypatch, summed_rough_scan_image):
+#     """Mock sum_images to return pre-computed result.
 
-    This avoids re-computing sum_images in every test that calls
-    find_candidate_fovs().
-    """
+#     This avoids re-computing sum_images in every test that calls
+#     find_candidate_fovs().
+#     """
 
-    def mock_sum_images_func(images):
-        return summed_rough_scan_image
+#     def mock_sum_images_func(images):
+#         return summed_rough_scan_image[0]
 
-    # Patch where sum_images is used (in autofocus module), not where it's defined
-    monkeypatch.setattr("pyseq2500.autofocus.sum_images", mock_sum_images_func)
-    return mock_sum_images_func
+#     def mock_median_func(arr, axis):
+#         return summed_rough_scan_image[1]
+
+#     # Patch where sum_images is used (in autofocus module), not where it's defined
+#     monkeypatch.setattr("pyseq2500.autofocus.sum_images", mock_sum_images_func)
+#     monkeypatch.setattr("pyseq2500.autofocus.median", mock_median_func)
+#     return mock_sum_images_func
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -210,7 +215,7 @@ async def fc_A_roi(test_directory):
     from pyseq_core.base_protocol import CUSTOM_ROI
 
     image_fields = {"nz": 1, "image_dir": str(test_directory / "images")}
-    focus_fields = {"output": str(test_directory / "focus"), "n_frames": 156}
+    focus_fields = {"output": str(test_directory / "focus"), "n_frames": 50}
     roi = CUSTOM_ROI(
         flowcell="A", LLx=17.462, LLy=35.5, URx=15.768, URy=34.252, overlap=0
     )

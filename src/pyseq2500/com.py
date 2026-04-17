@@ -39,7 +39,6 @@ class SerialCOM(BaseCOM):
 
             if self.rx_address is None:
                 self.rx_address = self.config.get("rx_address", None)
-                print(self.name, self.rx_address)
 
             async with self.lock:
                 try:
