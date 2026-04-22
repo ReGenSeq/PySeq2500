@@ -83,7 +83,7 @@ class EmulatedXStage(EmulatedSerialCOM):
     def mv(self) -> int:
         """Print 1 if stage is moving, 0 if not moving."""
         self.toggle += 1
-        if self.toggle > 1:
+        if self.toggle > 2:
             return 0
         else:
             return 1
@@ -185,7 +185,7 @@ class XStage(BaseStage):
         """Query stage for status and position.
 
         Returns:
-            bool: True if the stage is not moving, false otherwise.
+            bool: False if the stage is moving, True if stage is stopped.
         """
         response = await self.command("PR MV")
         ready = not bool(int(response))
@@ -203,7 +203,7 @@ class XStage(BaseStage):
             while position != await self.get_position():
                 await self.command(f"MA {position}", read=False)
                 await asyncio.sleep(1)
-                while await self.status():
+                while not await self.status():
                     await asyncio.sleep(1)
 
     async def get_position(self):

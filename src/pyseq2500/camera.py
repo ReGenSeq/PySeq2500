@@ -129,24 +129,22 @@ class dcamCOM:
         if not self.emulated:
             try:
                 self.emulated = False
-                from pyseq_core.dcam import HamamatsuCamera
-
-                dcam = ctypes.windll.dcamapi
-                temp = ctypes.c_int32(0)
-                if dcam.dcam_init(None, ctypes.byref(temp), None) != 1:
-                    raise DCAMException("DCAM initialization failed.")
-                n_cameras = temp.value
-                LOGGER.debug(f"DCAM found {n_cameras} cameras")
+                async with asyncio.timeout(60):
+                    n_cameras = await asyncio.to_thread(dcamCOM.dcam_init)
+                    LOGGER.debug(f"DCAM found {n_cameras} cameras")
             except AttributeError as e:
                 LOGGER.error(e)
                 LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
                 self.emulated = True
-            except DCAMException as e:
+            except (DCAMException, asyncio.TimeoutError) as e:
                 LOGGER.error(e)
                 LOGGER.error("DCAM failed, restart system")
+                LOGGER.warning("Using emulated cameras")
                 self.emulated = True
 
         try:
+            from pyseq_core.dcam import HamamatsuCamera
+
             for i in range(2):
                 if i not in self.cams:
                     if self.emulated:
@@ -162,6 +160,14 @@ class dcamCOM:
         except DCAMException as e:
             LOGGER.error(e)
             LOGGER.error(f"DCAM could not connect to Camera {i}")
+
+    @staticmethod
+    def dcam_init():
+        dcam = ctypes.windll.dcamapi
+        temp = ctypes.c_int32(0)
+        if dcam.dcam_init(None, ctypes.byref(temp), None) != 1:
+            raise DCAMException("DCAM initialization failed.")
+        return temp.value
 
 
 @define(kw_only=True)

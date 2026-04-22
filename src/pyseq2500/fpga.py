@@ -3,6 +3,8 @@ import logging
 from pyseq2500.com import EmulatedSerialCOM
 from attrs import define, field
 import re
+import asyncio
+from typing import Optional
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -12,6 +14,8 @@ FPGA Commands
 RESET --> Initialize/Reset FPGA
 TDIYERD --> Read y stage position
 TDIYEWR X --> Write y stage position as X
+TDIYPOS X --> Arm camera trigger to start at YStage position X
+TDIYARM3 X Y 1 --> Arm camera trigger to take X frames at YStage position Y
 
 """
 
@@ -24,6 +28,8 @@ class EmulatedFPGA(EmulatedSerialCOM):
     reset_pattern: re.Pattern = field(default=re.compile(r"RESET"))
     read_pattern: re.Pattern = field(default=re.compile(r"TDIYERD"))
     write_pattern: re.Pattern = field(default=re.compile(r"TDIYEWR (\d+)"))
+    ypos_pattern: re.Pattern = field(default=re.compile(r"TDIYPOS (\d+)"))
+    yarm_pattern: re.Pattern = field(default=re.compile(r"TDIYARM3 (\d+) (\d+) 1"))
 
     async def command(self, command: str, read: bool = True, delay: int = 0) -> str:
         """
@@ -43,6 +49,8 @@ class EmulatedFPGA(EmulatedSerialCOM):
             reset_match = re.search(self.reset_pattern, command)
             read_match = re.search(self.read_pattern, command)
             write_match = re.search(self.write_pattern, command)
+            ypos_match = re.search(self.ypos_pattern, command)
+            yarm_match = re.search(self.yarm_pattern, command)
 
             if reset_match:
                 self.initialized = True
@@ -51,6 +59,10 @@ class EmulatedFPGA(EmulatedSerialCOM):
                 response = f"TDIYERD {self.position}"
             elif write_match:
                 response = self.write(write_match)
+            elif ypos_match:
+                response = "TDIYPOS"
+            elif yarm_match:
+                response = "TDIYARM3"
             else:
                 LOGGER.debug(f"{self.name}: Unknown command {command} to respond to")
                 response = ""
@@ -86,6 +98,7 @@ class FPGA(BaseInstrument):
 
     name: str = field(default="FPGA")
     _status: bool = field(default=False)
+    _position: Optional[int] = field(default=None)
 
     @property
     def y_offset(self):
@@ -115,6 +128,8 @@ class FPGA(BaseInstrument):
     async def reset(self) -> bool:
         response = await self.command("RESET", read=2, delay=1)
         self._status = response.strip() == "RESET"
+        if self._position is not None:
+            self.write_position(self._position)
 
     async def read_position(self) -> int:
         tdi_pos = None
@@ -125,14 +140,29 @@ class FPGA(BaseInstrument):
                 tdi_pos = int(response) - self.y_offset
             except ValueError:
                 tdi_pos = None
+                await asyncio.sleep(1)
         return tdi_pos
 
     async def write_position(self, position: int):
         while abs(await self.read_position() - position) > 5:
             await self.command(f"TDIYEWR {position + self.y_offset}")
+            self._position = position
 
     async def TDIARM(self, y_init: int, n_triggers: int):
-        y_pos = y_init + self.y_offset - 80000
-        await self.command(f"TDIYPOS {y_pos}+")
-        y_pos = y_init + self.y_offset - 10000
-        await self.command(f"TDIYARM3 {n_triggers} {y_pos} 1")
+        confirmed = False
+        while not confirmed:
+            y_pos = y_init + self.y_offset - 80000
+            response = await self.command(f"TDIYPOS {y_pos}", delay=1)
+            if response.strip() == "TDIYPOS":
+                confirmed = True
+            else:
+                await self.reset()
+
+            if confirmed:
+                y_pos = y_init + self.y_offset - 10000
+                response = await self.command(f"TDIYARM3 {n_triggers} {y_pos} 1")
+                if response.strip() == "TDIYARM3":
+                    confirmed = True
+                else:
+                    confirmed = False
+                    await self.reset()

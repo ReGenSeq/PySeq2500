@@ -18,6 +18,7 @@ from pyseq2500.fpga import EmulatedFPGA, FPGA
 from pyseq2500.laser import EmulatedLaser, Laser
 from pyseq2500.optics import FilterWheel, EmissionFilter, Shutter, EmulatedOptics
 from pyseq2500.camera import TDICameras, dcamCOM
+from pyseq2500.com import COM_DICT
 from pyseq_core.base_protocol import BaseROI
 
 from pre import image_analysis as ia
@@ -28,9 +29,7 @@ from pre import image_analysis as ia
 async def fpga():
     """FPGA for tilt stage, obj stage, filters, shutter and LEDs."""
 
-    from pyseq2500.fpga import EmulatedFPGA
-
-    fpga = EmulatedFPGA(address="FPGACOM")
+    fpga = FPGA(com=COM_DICT["FPGA"])
 
     yield fpga
 
