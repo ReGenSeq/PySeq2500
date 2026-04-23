@@ -208,16 +208,18 @@ def test_directory(tmp_path_factory):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def fc_A_roi(test_directory):
+async def fc_A_roi(request, test_directory):
     """Test region of interest to image on flow cell A."""
 
     from pyseq_core.base_protocol import CUSTOM_ROI
 
     image_fields = {"nz": 1, "image_dir": str(test_directory / "images")}
+
     focus_fields = {"output": str(test_directory / "focus"), "n_frames": 50}
     roi = CUSTOM_ROI(
         flowcell="A", LLx=17.462, LLy=35.5, URx=15.768, URy=34.252, overlap=0
-    )
+        )
+
     stage = PySeq2500.custom_roi_stage(roi)
 
     return BaseROI(name="centerA", stage=stage, image=image_fields, focus=focus_fields)

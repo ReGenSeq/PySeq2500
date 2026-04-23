@@ -155,13 +155,15 @@ class TestMicroscope:
         )
         assert all(status)
 
-    async def test_scan(self, microscope: Microscope, fc_A_roi, mocker):
-        x = fc_A_roi.stage.x_init
-        z = fc_A_roi.stage.z_init
-        name = fc_A_roi.name
-        image_dir = Path(fc_A_roi.image.image_dir)
+    async def test_scan(self, microscope: Microscope, fc_A_roi, fc_B_roi mocker):
+
 
         if microscope.name == "MockMicroscope":
+            # Use fc_A_roi for mock because it is smaller
+            x = fc_A_roi.stage.x_init
+            z = fc_A_roi.stage.z_init
+            name = fc_A_roi.name
+            image_dir = Path(fc_A_roi.image.image_dir)
             mock_save_image = mocker.patch.object(microscope.Camera, "save_image")
             await microscope._scan(fc_A_roi)
             assert mock_save_image.call_count == fc_A_roi.stage.nx
@@ -171,9 +173,14 @@ class TestMicroscope:
                 assert mock_save_image.call_args_list[n].args[0] == im_name
                 assert mock_save_image.call_args_list[n].args[1] == image_dir
         else:
-            await microscope._scan(fc_A_roi)
-            for n in range(fc_A_roi.stage.nx):
-                x_pos = n * fc_A_roi.stage.x_step + x
+            # Use fc_B_roi for actual sequence, because it is large enough that it won't throw a TDI error
+            x = fc_B_roi.stage.x_init
+            z = fc_B_roi.stage.z_init
+            name = fc_B_roi.name
+            image_dir = Path(fc_B_roi.image.image_dir)
+            await microscope._scan(fc_B_roi)
+            for n in range(fc_B_roi.stage.nx):
+                x_pos = n * fc_B_roi.stage.x_step + x
                 im_name = f"s{name}_x{x_pos}_z{z}"
                 written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
                 assert len(written_files) == 4
@@ -189,35 +196,41 @@ class TestMicroscope:
         self,
         microscope: Microscope,
         fc_A_roi,
+        fc_B_roi,
         mocker,
         tilt_init=21500,
         tilt_last=22000,
-        tilt_step=500,
+        tilt_step=250,
     ):
-        x = fc_A_roi.stage.x_init
-        name = fc_A_roi.name
-        image_dir = Path(fc_A_roi.image.image_dir)
 
         if microscope.name == "MockMicroscope":
+            x = fc_A_roi.stage.x_init
+            image_dir = Path(fc_A_roi.image.image_dir)
+            name = fc_A_roi.name
             mock_save_image = mocker.patch.object(microscope.Camera, "save_image")
             await microscope._tilt_stack(
                 fc_A_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
             )
             c = 0
             for n in range(fc_A_roi.stage.nx):
+                x_pos = n * fc_A_roi.stage.x_step + x
                 for t in range(tilt_init, tilt_last, tilt_step):
-                    x_pos = n * fc_A_roi.stage.x_step + x
                     im_name = f"s{name}_x{x_pos}_z{t}"
                     assert mock_save_image.call_args_list[c].args[0] == im_name
                     assert mock_save_image.call_args_list[c].args[1] == image_dir
                     c += 1
         else:
+            x = fc_B_roi.stage.x_init
+            image_dir = Path(fc_B_roi.image.image_dir)
+            name = fc_B_roi.name
             await microscope._tilt_stack(
-                fc_A_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
+                fc_B_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
             )
-            for n in range(fc_A_roi.stage.nx):
+            for n in range(fc_B_roi.stage.nx):
+                x_pos = n * fc_B_roi.stage.x_step + x
                 for n, t in enumerate(range(tilt_init, tilt_last, tilt_step)):
-                    x_pos = n * fc_A_roi.stage.x_step + x
                     im_name = f"s{name}_x{x_pos}_z{t}"
+                    print(image_dir)
+                    print(im_name)
                     written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
                     assert len(written_files) == 4

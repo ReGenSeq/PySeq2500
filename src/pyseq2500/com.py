@@ -94,7 +94,7 @@ class SerialCOM(BaseCOM):
             async with asyncio.timeout(10):
                 while len(response) == 0:
                     response = await self.rx.readline_async(size=-1)
-                    response = response.decode(errors="ignore")
+                    response = response.decode(errors="ignore").strip()
                     if len(response) == 0:
                         await asyncio.sleep(1)
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")

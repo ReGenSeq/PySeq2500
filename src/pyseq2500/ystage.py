@@ -241,6 +241,8 @@ class YStage(BaseStage):
                     )
                 except ValueError:
                     pass
+                except asyncio.TimeoutError:
+                    LOGGER.error(f"{self.name}: Could not set gains")
 
         return all_true
 
