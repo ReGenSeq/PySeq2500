@@ -250,25 +250,27 @@ class TDICameras(BaseCamera):
         The minimum interval that you can set is 20 μs.
 
         Args:
-            exposure (float | dict[str, float]): The desired exposure time in seconds,
+            exposure (float | dict[str, float]): The desired exposure time in microseconds,
                 or a dict mapping camera names to exposure times.
 
         Returns:
-            List[float]: The set exposure times in seconds.
+            List[float]: The set exposure times in microseconds.
         """
         if isinstance(exposure, dict):
             for cam in self.cams.values():
                 cam_name = self.config[cam.camera_id]["name"]
                 if cam_name in exposure:
                     time = exposure[cam_name]
-                    cam.setPropertyValue("exposure_time", time / 1000)
-                    time = cam.getPropertyValue("exposure_time")
-                    self._exposure[cam.camera_id] = time * 1000
+                    if time != self._exposure[cam.camera_id]:
+                        cam.setPropertyValue("exposure_time", time / 1000)
+                        time = cam.getPropertyValue("exposure_time")[0]
+                        self._exposure[cam.camera_id] = time * 1000
         else:
             for i, cam in self.cams.items():
-                cam.setPropertyValue("exposure_time", exposure / 1000)
-                time = cam.getPropertyValue("exposure_time")
-                self._exposure[i] = time * 1000
+                if exposure != self._exposure[i]:
+                    cam.setPropertyValue("exposure_time", exposure / 1000)
+                    time = cam.getPropertyValue("exposure_time")[0]
+                    self._exposure[i] = time * 1000
         return self._exposure
 
     async def get_exposure(self) -> List[float]:
@@ -278,7 +280,7 @@ class TDICameras(BaseCamera):
             float: The current exposure time in seconds.
         """
         for i, cam in enumerate(self):
-            self._exposure[i] = cam.getPropertyValue("exposure_time") * 1000
+            self._exposure[i] = cam.getPropertyValue("exposure_time")[0] * 1000
         return self._exposure
 
     @property
@@ -294,7 +296,10 @@ class TDICameras(BaseCamera):
         """
         for i, cam in enumerate(self):
             self._gain[i] = cam.setPropertyValue("contrast_gain", gain)
-        return gain
+
+        await self.get_gain()
+
+        return self._gain
 
     async def get_gain(self):
         """Retrieves the current contrast enhancement gain from the camera.
@@ -303,7 +308,7 @@ class TDICameras(BaseCamera):
             int: The current contrast enhancement gain.
         """
         for i, cam in enumerate(self):
-            self._gain[i] = cam.getPropertyValue("contrast_gain")
+            self._gain[i] = cam.getPropertyValue("contrast_gain")[0]
         return self._gain
 
     async def capture(self):

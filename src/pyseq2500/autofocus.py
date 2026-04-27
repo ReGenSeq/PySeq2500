@@ -16,6 +16,7 @@ from scipy.optimize import curve_fit, OptimizeWarning
 from scipy.stats import median_abs_deviation
 import logging
 from operator import attrgetter
+from datetime import datetime
 
 from pre.image_analysis import (
     HiSeqImages,
@@ -141,18 +142,36 @@ class Autofocus:
 
         LOGGER.info("Autofocus:: Capturing rough scan for focus analysis")
 
+        # Make roi specific image directory
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        img_dir = Path(roi.focus.output) / f"{roi.name}_{timestamp}"
+        img_dir.mkdir(parents=True, exist_ok=True)
+
+        # Move to ROI
+        await self.microscope._move(
+            x=roi.stage.x_init,
+            y=roi.stage.y_init,
+            z=roi.stage.z_init,
+            tilt1=roi.stage.tilt1,
+            tilt2=roi.stage.tilt2,
+            tilt3=roi.stage.tilt3,
+        )
+
+        # Set laser power and laser filters
+        await self.microscope._set_parameters(roi.focus.optics)
+
         # Set Z position slightly out of focus for rough scan
         z_last = roi.stage.z_init + 1
 
         # Capture rough scan
         await self.microscope._scan(
             roi=roi,
-            name=f"RoughScan_{roi.name}",
-            image_dir=roi.focus.output,
+            name=f"RoughScan{roi.name}",
+            image_dir=img_dir,
             z_last=z_last,
         )
 
-        return roi.focus.output
+        return img_dir
 
     def load_and_process_images(self, image_dir: Union[str, Path]):
         """Load and process rough scan images.
@@ -813,13 +832,15 @@ class Autofocus:
 
         sensor_height = self.microscope.Camera.config.get("sensor_height")
         cols = abs(roi.stage.y_last - roi.stage.y_init) / self.microscope.YStage.spum
-        n_per_tile = max(3, roi.focus.coverage * cols / sensor_height)
+        n_per_tile = max(2, roi.focus.coverage * cols / sensor_height)
 
         if "full" in roi.focus.routine:
             # Scale n_inliers based on area of roi
-            nx = max(1, roi.stage.nx - 1)
-            n_inliers = round(nx * n_per_tile)
-            n_inliers += n_inliers % 2  # Add 1 if even
+            nx = max(2, roi.stage.nx - 1)
+            n_inliers = max(5, round(nx * n_per_tile / 2))
+            if n_inliers % 2 == 0:
+                # Add 1 if even
+                n_inliers += 1
 
             return n_inliers, roi
 
@@ -941,7 +962,7 @@ class Autofocus:
 
         # Generate and save FOV map visualization
         try:
-            fov_map_path = self.map_and_save_focus_fovs(candidate_fovs)
+            fov_map_path = self.map_and_save_focus_fovs(candidate_fovs, image_dir)
             LOGGER.info(f"Autofocus:: FOV map saved to {fov_map_path}")
         except Exception as e:
             LOGGER.warning(f"Autofocus:: Failed to save FOV map: {e}")

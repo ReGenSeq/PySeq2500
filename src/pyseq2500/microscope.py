@@ -19,8 +19,7 @@ import logging
 import asyncio
 from attrs import define, field
 from typing import Union, Optional, Tuple
-from math import ceil
-from functools import cached_property
+from math import floor
 from pathlib import Path
 import numpy as np
 
@@ -87,9 +86,9 @@ class Microscope(BaseMicroscope):
         """Property for the FPGA."""
         return self.instruments.get("FPGA")
 
-    @cached_property
-    def resolution(self) -> float:
-        return self.config["resolution"]
+    # @cached_property
+    # def resolution(self) -> float:
+    #     return self.config["resolution"]
 
     async def _configure(self, exp_config: dict = {}):
         """Configure microscope"""
@@ -109,8 +108,8 @@ class Microscope(BaseMicroscope):
         self,
         roi: Optional[BaseROI] = None,
         name: str = "",
-        y_init: Optional[int] = None,
-        y_last: Optional[int] = None,
+        # y_init: Optional[int] = None,
+        # y_last: Optional[int] = None,
         n_frames: int = 0,
         reset_y: bool = False,
         image_dir: Union[str, Path] = ".",
@@ -122,29 +121,23 @@ class Microscope(BaseMicroscope):
         # If parameters not specified or not in roi default to config or current positions
 
         # Check if minimal args exist
-        if y_last is None and n_frames == 0 and roi is None:
-            raise ValueError("Must specify y_last or n_frames")
+        if n_frames == 0 and roi is None:
+            raise ValueError("Must specify n_frames or roi")
 
-        # Get ROI (preferred)
-        if n_frames == 0 and y_last is None and roi is not None:
-            y_init = roi.stage.y_init
-            y_last = roi.stage.y_last - 300000
+        # Get y_init, ROI overrides y_init kw_arg
+        y_init = self.YStage.position
+        if n_frames == 0 and roi is not None:
             n_frames = roi.stage.n_frames
+
+        # Get image_dir, image_dir kw_arg overides ROI
+        if image_dir == "." and roi is not None:
             image_dir = roi.image.image_dir
 
-        # Get y_init
-        if y_init is None:
-            y_init = self.YStage.position
-            if y_last is not None and y_init < y_last:
-                raise ValueError("y_last must be < y_init")
-
-        # Fall back to n_frames or y_last
+        # Calculate n_triggers and y_last
+        y_spum = self.YStage.config["spum"]
         height = self.Camera.config["TDI"]["sensor_mode_line_bundle_height"]
-        if n_frames == 0 and y_last is not None:
-            n_frames = ceil(y_init - y_last) / height
-        elif n_frames > 0 and y_last is None:
-            y_last = y_init - n_frames * height - 300000
-        n_triggers = n_frames * height
+        n_triggers = n_frames * height  # px
+        y_last = floor(y_init - n_triggers * self.resolution * y_spum - 300000)
 
         # Check Cameras and sync YStage with FPGA
         await asyncio.gather(
@@ -164,17 +157,25 @@ class Microscope(BaseMicroscope):
         await self.YStage.move(y_last)  # Move Y Stage
 
         # Stop Imaging
-        await self.Shutter.close()  # Close laser shutter
-        await self.Camera.stopAcquisition()  # Stop cameras
+        _ = []
+        _.append(self.Shutter.close())  # Close laser shutter
+        _.append(self.Camera.stopAcquisition())  # Stop cameras
+        await asyncio.gather(*_)
 
         # Save Images
-        frame_count = await self.Camera.getFrameCount()  # Stop cameras
-        await self.Camera.save_image(name, image_dir)  # Stop cameras
+        frame_count = await self.Camera.getFrameCount()  # Stop
+        if frame_count > 0:
+            await self.Camera.save_image(name, image_dir)  # Stop cameras
+        else:
+            LOGGER.error("Cameras did not acquire frames")
 
         # Reset for next image
-        _ = [self.YStage.set_mode("moving"), self.Camera.freeFrames()]
+        _ = []
+        _.append(self.Camera.freeFrames())
         if reset_y:
             _.append(self.YStage.move(y_init))
+        _.append(self.FPGA.command("TDICLINES"))
+        _.append(self.FPGA.command("TDIPULSES"))
         await asyncio.gather(*_)
 
         return frame_count == n_frames
@@ -207,20 +208,19 @@ class Microscope(BaseMicroscope):
         x_step = roi.stage.x_step
         await self._move(x=x_init, y=y_init)
 
-        # Loop over x tiles
-        _x = range(x_init, x_last, x_step)
-        nx = len(_x)
-        for i, x in enumerate(_x):
-            LOGGER.info(f"Scanning {name} tile {i + 1}/{nx}")
-            await self.XStage.move(x)
-            tilt_pos = range(tilt_init, tilt_last, tilt_step)
-            nt = len(tilt_pos)
-            for i, _t in enumerate(tilt_pos):
-                await self.TiltStage.move(_t)
-                reset_y = i < nt - 1
-                await self._capture(
-                    roi, name=f"s{name}_x{x}_z{_t}", reset_y=reset_y, **kwargs
-                )
+        # Loop over tilt position
+        tilt_pos = range(tilt_init, tilt_last, tilt_step)
+        nt = len(tilt_pos)
+        for i, _t in enumerate(tilt_pos):
+            await self.TiltStage.move()
+            LOGGER.info(f"Scanning {name} tilt position {_t} ({i + 1}/{nt})")
+            _x = range(x_init, x_last, x_step)
+            nx = len(_x)
+            for ii, x in enumerate(_x):
+                await self.XStage.move(x)
+                name = f"s{name}_x{x}_z{_t}"
+                reset_y = ii < nx - 1 or i < nt - 1
+                await self._capture(roi, name, reset_y=reset_y, **kwargs)
 
     @check_name
     async def _z_stack(
@@ -276,7 +276,7 @@ class Microscope(BaseMicroscope):
         nx = len(_x)
         for i, x in enumerate(_x):
             LOGGER.info(f"Scanning {name} tile {i + 1}/{nx}")
-            await self.XStage.move(x)
+            await self._move(x=x, y=y_init)
             await self._z_stack(roi, name=f"s{name}_x{x}", **kwargs)
 
     async def _expose_scan(self, roi: BaseROI, duration: Union[float, int]):
@@ -410,8 +410,8 @@ class Microscope(BaseMicroscope):
         for color in self.Lasers:
             _.append(self.Lasers[color].set_power(params["power"][color]))
             _.append(self.FilterWheels[color].set_filter(params["filter"][color]))
-        if "exposure" in params:
-            _.append(self.Camera.set_exposure(params["exposure"]))
+        # if "exposure" in params:
+        #     _.append(self.Camera.set_exposure(params["exposure"]))
         await asyncio.gather(*_)
 
     async def _find_focus(self, roi: BaseROI):

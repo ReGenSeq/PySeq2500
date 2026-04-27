@@ -65,8 +65,8 @@ power.green = 0
 filter.red = "home"
 filter.green = "home"
 filter.emission = "in"
-exposure.Camera_558_687 = 1
-exposure.Camera_610_740 = 1  
+exposure.Camera_558_687 = 2.5685333333333333  # us
+exposure.Camera_610_740 = 2.5685333333333333  # us
 
 
 [stage]

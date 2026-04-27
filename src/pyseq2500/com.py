@@ -13,6 +13,10 @@ from pyseq_core.utils import map_coms
 import asyncio
 
 LOGGER = logging.getLogger("PySeq")
+try:
+    LOOP = asyncio.get_running_loop()
+except RuntimeError:
+    LOOP = None
 
 
 @define(kw_only=True)
@@ -45,7 +49,7 @@ class SerialCOM(BaseCOM):
                     # self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                     address = self.address
                     self.tx = AioSerial(
-                        port=self.address, baudrate=baudrate, timeout=timeout
+                        port=self.address, baudrate=baudrate, timeout=timeout, loop=LOOP
                     )
                     self._connected = True
 
@@ -62,7 +66,7 @@ class SerialCOM(BaseCOM):
                     if port is not None:
                         try:
                             self.rx = AioSerial(
-                                port=port, baudrate=baudrate, timeout=timeout
+                                port=port, baudrate=baudrate, timeout=timeout, loop=LOOP
                             )
                             self.rx_address = port
                             address += f" and {port}"
@@ -87,23 +91,40 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self) -> str:
+    async def read(self, timeout=10) -> str:
         cmdid = f"{self._cmdid:04d}"
         response = ""
         try:
-            async with asyncio.timeout(10):
+            async with asyncio.timeout(timeout):
                 while len(response) == 0:
                     response = await self.rx.readline_async(size=-1)
                     response = response.decode(errors="ignore").strip()
                     if len(response) == 0:
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
+                # while True:
+                #     # Read whatever is available (up to 128 bytes)
+                #     # read_async is usually more reliable than readline on Windows
+                #     chunk = await self.rx.read_async(128)
+
+                #     if chunk:
+                #         response_bytes += chunk
+                #         # Check for common terminators (\n, \r, or your specific end-char)
+                #         if b'\n' in response_bytes or b'\r' in response_bytes:
+                #             break
+                #     else:
+                #         # If no bytes, yield to the loop so it can poll the hardware
+                #         await asyncio.sleep(0.01)
+
+                # response = response_bytes.decode(errors="ignore").strip()
+                # LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
+                # return response
         except asyncio.TimeoutError:
             LOGGER.warning(f"{self.name} :: rx {cmdid} :: response timed out")
             return response
 
-    async def command(self, command: str, read=True, delay=0.1) -> str:
+    async def command(self, command: str, read=True, delay=0.1, timeout=10) -> str:
         async with self.lock:
             await self.write(command)
 
@@ -113,7 +134,7 @@ class SerialCOM(BaseCOM):
                 if isinstance(read, bool):
                     read = 1
                 for _ in range(read):
-                    response = await self.read()
+                    response = await self.read(timeout=timeout)
                 return response  # pyright: ignore[reportPossiblyUnboundVariable]
             else:
                 return ""

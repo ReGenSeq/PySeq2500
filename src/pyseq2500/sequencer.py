@@ -15,7 +15,7 @@ class PySeq2500(BaseSequencer):
         return {fc: FlowCell(name=fc) for fc in ["A", "B"]}
 
     @staticmethod
-    def custom_roi_stage(roi: Optional[CUSTOM_ROI], **kwargs) -> dict:
+    def custom_roi_stage(roi: Optional[CUSTOM_ROI] = None, **kwargs) -> dict:
         """Take LLx, LLy, URx, URy coordinates and return stage position parameters."""
 
         if roi is None:
@@ -44,7 +44,7 @@ class PySeq2500(BaseSequencer):
         resolution = HW_CONFIG["Microscope"]["resolution"]  # microns / pixel
         tile_width = HW_CONFIG["Cameras"]["sensor_width"] * resolution  # microns
         bundle_height = HW_CONFIG["Cameras"]["TDI"]["sensor_mode_line_bundle_height"]
-        bundle_height = bundle_height * y_spum * resolution  # microns
+        bundle_height = bundle_height * resolution * y_spum  # y_steps
 
         # Number of tiles
         x_step = floor(
@@ -59,12 +59,12 @@ class PySeq2500(BaseSequencer):
         x_init = floor(x_center - (n_tiles * x_step / 2))
         x_last = ceil(x_init + n_tiles * x_step)
 
-        y_init = ceil(y_origin + LLy)
-        y_last = floor(y_origin + URy)
+        y_init = ceil(y_origin + LLy)  # step
+        n_frames = ceil((LLy - URy) / bundle_height) + 10  # px
+        y_last = floor(y_init - n_frames * resolution * y_spum - 30000)
         y_center = int(y_init - (y_init - y_last) / 2)
 
         # Number of camera frames
-        n_frames = ceil((LLy - URy) / y_spum / resolution / bundle_height) + 10
 
         # Adjust x and y center so focus will image (32 frames, 128 bundle) in center of section
         x_center -= int(tile_width * x_spum / 2)

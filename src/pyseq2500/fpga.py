@@ -129,7 +129,7 @@ class FPGA(BaseInstrument):
         response = await self.command("RESET", read=2, delay=1)
         self._status = response.strip() == "RESET"
         if self._position is not None:
-            self.write_position(self._position)
+            await self.write_position(self._position)
 
     async def read_position(self) -> int:
         tdi_pos = None

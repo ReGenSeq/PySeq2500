@@ -155,9 +155,7 @@ class TestMicroscope:
         )
         assert all(status)
 
-    async def test_scan(self, microscope: Microscope, fc_A_roi, fc_B_roi mocker):
-
-
+    async def test_scan(self, microscope: Microscope, fc_A_roi, fc_B_roi, mocker):
         if microscope.name == "MockMicroscope":
             # Use fc_A_roi for mock because it is smaller
             x = fc_A_roi.stage.x_init
@@ -202,7 +200,6 @@ class TestMicroscope:
         tilt_last=22000,
         tilt_step=250,
     ):
-
         if microscope.name == "MockMicroscope":
             x = fc_A_roi.stage.x_init
             image_dir = Path(fc_A_roi.image.image_dir)
