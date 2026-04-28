@@ -36,10 +36,11 @@ class EmulatedTDICamera:
 
     def getPropertyValue(self, property):
         if property in self.properties:
-            return self.properties[property]
+            val = self.properties[property]
         else:
-            self.properties[property] = 1.0
-            return 1.0
+            val = (1.0, 1.0)
+            self.properties[property] = val
+        return val
 
     def get_status(self):
         return 3

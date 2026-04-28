@@ -188,7 +188,7 @@ class EmulatedSerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self):
+    async def read(self, timeout=None):
         pass
 
     def response(self, response) -> str:

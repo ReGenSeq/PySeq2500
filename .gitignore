@@ -222,4 +222,7 @@ personal_scripts
 # AI helpers
 .qwen
 CLAUDE.md
+.claude/
+CONTEXT.md
+context_docs/
 

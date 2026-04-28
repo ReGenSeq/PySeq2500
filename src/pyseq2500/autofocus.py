@@ -13,6 +13,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, Tuple, Union, Generator, List
 from scipy.optimize import curve_fit, OptimizeWarning
+from scipy.ndimage import sobel as ndimage_sobel
 from scipy.stats import median_abs_deviation
 import logging
 from operator import attrgetter
@@ -420,7 +421,8 @@ class Autofocus:
             #     self.fov_shape = first_img.shape  # (height, width)
 
         # Find best Z position
-        best_z = self.find_best_z(focus_stack)
+        fov_label = f"r{fov.px_row}_c{fov.px_col}"
+        best_z = self.find_best_z(focus_stack, fov_label=fov_label)
 
         if best_z is not None:
             LOGGER.debug(
@@ -440,37 +442,58 @@ class Autofocus:
         """Format focus stack data for analysis using Tenengrad focus metric.
 
         Args:
-            focus_stack: Focus stack from camera, shape (n_frames, n_channels)
-                         with dtype=object, each element is a 2D image array
+            focus_stack: Focus stack from camera with dimensions (channel, z, row, col).
 
         Returns:
-            Formatted focus data array [n_frames, n_channels] with numeric dtype
-            containing focus metrics, or False if no signal
+            Focus metric array of shape (n_frames, n_channels), or False if no signal.
         """
+        import time
 
         n_channels, n_frames = focus_stack.shape[0:2]
+        LOGGER.debug(
+            f"Autofocus:FormatFocusData: formatting {n_channels}×{n_frames} frames"
+        )
+        t0 = time.perf_counter()
 
-        # Calculate Tenengrad focus metric per frame per channel
-        # Tenengrad = sum of squared gradients (using vertical Sobel for horizontal edges)
-        focus_metric = np.zeros((n_frames, n_channels))
-        LOGGER.debug(f"Formatting {n_channels * n_frames} frames")
-        for i in range(n_frames):
-            for j, ch in enumerate(focus_stack.channel):
-                img = focus_stack.sel(channel=ch).isel(z=i)
-                if img is not None and img.shape[0] >= 3 and img.shape[1] >= 3:
-                    # Apply vertical Sobel filter (detects horizontal edges)
-                    gradient = sobel_v(img.astype(float))
-                    # Tenengrad: sum of squared gradients
-                    focus_metric[i, j] = np.sum(gradient**2)
+        if focus_stack.dtype == object:
+            focus_metric = self._format_focus_data_loop(
+                focus_stack, n_channels, n_frames
+            )
+        else:
+            # Vectorized path for numeric DataArrays (n_channels, n_frames, row, col)
+            arr = focus_stack.values.astype(np.float32)
+            # Sobel along row axis (axis=2) replicates skimage.sobel_v per 2D frame
+            gradient = ndimage_sobel(arr, axis=2)
+            # Tenengrad: sum of squared gradients over spatial dims → (n_channels, n_frames)
+            focus_metric = np.sum(
+                gradient**2, axis=(-2, -1)
+            ).T  # → (n_frames, n_channels)
 
-        # Check for valid signal
-        if np.sum(focus_metric) == 0:
+        elapsed = time.perf_counter() - t0
+        LOGGER.debug(f"Autofocus:FormatFocusData: done in {elapsed:.3f}s")
+
+        if focus_metric is False or np.sum(focus_metric) == 0:
             LOGGER.debug("No signal in focus stack")
             return False
 
         return focus_metric
 
-    def find_best_z(self, focus_stack: DataArray) -> Union[int, float, None]:
+    def _format_focus_data_loop(
+        self, focus_stack: DataArray, n_channels: int, n_frames: int
+    ) -> Union[np.ndarray, bool]:
+        """Loop-based Tenengrad metric for object-dtype DataArrays (test/synthetic stacks)."""
+        focus_metric = np.zeros((n_frames, n_channels))
+        for i in range(n_frames):
+            for j, ch in enumerate(focus_stack.channel):
+                img = focus_stack.sel(channel=ch).isel(z=i)
+                if img is not None and img.shape[0] >= 3 and img.shape[1] >= 3:
+                    gradient = sobel_v(img.astype(float))
+                    focus_metric[i, j] = np.sum(gradient**2)
+        return focus_metric
+
+    def find_best_z(
+        self, focus_stack: DataArray, fov_label: str = ""
+    ) -> Union[int, float, None]:
         """Find the best Z position from a focus stack.
 
         Uses mixed Gaussian fitting to find the optimal focus position.
@@ -478,6 +501,7 @@ class Autofocus:
         Args:
             focus_stack: Focus stack data from Microscope._focus_stack,
                          shape (n_frames, n_channels) with dtype=object
+            fov_label: Label used in the output filename when plot_data is enabled
 
         Returns:
             Best Z position or None if not found
@@ -500,39 +524,119 @@ class Autofocus:
         # Stack steps and metrics
         formatted = np.vstack((focus_stack.z.values, combined_metric)).T
 
-        # # Fit lorentzian
-        best_z = self.fit_lorentzian(formatted)
+        # Fit lorentzian
+        best_z, popt = self.fit_lorentzian(formatted)
+
+        if best_z is None:
+            return None
+
+        if getattr(self.roi.focus, "plot_data", False):
+            self._plot_focus_metric(formatted, popt, best_z, fov_label)
 
         ztype = type(self.microscope.ZStage.config["position"]["max_val"])
 
         return ztype(best_z)
 
-    def fit_lorentzian(self, focus_data: np.ndarray) -> Union[int, float, None]:
-        """Fit data to lorentzian model."""
+    def fit_lorentzian(
+        self, focus_data: np.ndarray
+    ) -> Tuple[Union[int, float, None], Optional[np.ndarray]]:
+        """Fit data to lorentzian model.
+
+        Returns:
+            Tuple of (best_z, popt) where popt holds all fitted parameters,
+            or (None, None) on failure, or (fallback_z, None) when fit diverges.
+        """
 
         z, focus = focus_data[:, 0], focus_data[:, 1]
+        z_min, z_max = float(z.min()), float(z.max())
+        z_range = z_max - z_min
 
         # Initial guesses for the optimizer
-        wid = self.roi.focus.tolerance * self.microscope.ZStage.spum
+        wid = min(
+            self.roi.focus.tolerance * self.microscope.ZStage.spum,
+            z_range * 0.5,  # clamp to half the scanned range so p0 stays within bounds
+        )
         p0 = [np.max(focus), z[np.argmax(focus)], wid, np.min(focus)]
-        # TODO add bounds
+
+        # Constrain the fit: center must stay within the scanned z range,
+        # amplitude and width must be positive, offset bounded to normalized range.
+        bounds = (
+            [0, z_min, 0, 0],
+            [np.inf, z_max, z_range, 1.0],
+        )
 
         # Calculate the fit
         try:
             popt, pcov, infodict, mesg, ier = curve_fit(
-                lorentzian, z, focus, p0=p0, full_output=True
+                lorentzian, z, focus, p0=p0, bounds=bounds, full_output=True
             )
             LOGGER.debug(f"Autofocus:FitLorentzian: Success: {mesg}")
-            return popt[1]
+
+            # Validate fit quality
+            amp, ctr, wid_fit, off = popt
+            focus_start = self.microscope.ZStage.config.get("focus_start", -np.inf)
+            focus_stop = self.microscope.ZStage.config.get("focus_stop", np.inf)
+            peak_too_small = amp < 0.1
+            ctr_out_of_range = not (focus_start <= ctr <= focus_stop)
+            bad_width = wid_fit <= 0
+
+            if peak_too_small or ctr_out_of_range or bad_width:
+                LOGGER.warning(
+                    f"Autofocus:FitLorentzian: Poor fit (amp={amp:.3f}, "
+                    f"ctr={ctr:.0f}, wid={wid_fit:.0f}). Falling back to largest focus metric."
+                )
+                return z[np.argmax(focus)], None
+
+            return ctr, popt
         except ValueError as e:
             LOGGER.error(e)
-            return None
+            return None, None
         except (RuntimeError, OptimizeWarning) as e:
             LOGGER.warning(e)
             LOGGER.warning(
                 "Autofocus:FitLorentzian: Falling back to largest focus metric"
             )
-            return np.argmax(focus)
+            return z[np.argmax(focus)], None
+
+    def _plot_focus_metric(
+        self,
+        focus_data: np.ndarray,
+        popt: Optional[np.ndarray],
+        best_z: Union[int, float],
+        fov_label: str = "",
+    ) -> None:
+        """Save a PNG of the focus metric vs z position with the fitted curve."""
+        z, metric = focus_data[:, 0], focus_data[:, 1]
+
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.scatter(z, metric, s=20, color="steelblue", label="measured", zorder=3)
+
+        if popt is not None:
+            z_fine = np.linspace(z.min(), z.max(), 300)
+            ax.plot(
+                z_fine,
+                lorentzian(z_fine, *popt),
+                color="tomato",
+                linewidth=1.5,
+                label="Lorentzian fit",
+            )
+
+        ax.axvline(
+            best_z,
+            color="gray",
+            linestyle="--",
+            linewidth=1,
+            label=f"best z = {best_z}",
+        )
+        ax.set_xlabel("Z position (steps)")
+        ax.set_ylabel("Focus metric (normalized)")
+        ax.set_title(f"Focus metric — {fov_label}" if fov_label else "Focus metric")
+        ax.legend(fontsize=8)
+
+        out_path = Path(self.focus_output) / f"focus_metric_{fov_label}.png"
+        fig.savefig(out_path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        LOGGER.debug(f"Autofocus: Saved focus metric plot to {out_path}")
 
     def ransac_focus(
         self,
@@ -961,11 +1065,12 @@ class Autofocus:
         await self.microscope.ZStage.move(opt_z)
 
         # Generate and save FOV map visualization
-        try:
-            fov_map_path = self.map_and_save_focus_fovs(candidate_fovs, image_dir)
-            LOGGER.info(f"Autofocus:: FOV map saved to {fov_map_path}")
-        except Exception as e:
-            LOGGER.warning(f"Autofocus:: Failed to save FOV map: {e}")
+        if getattr(self.roi.focus, "plot_data", True):
+            try:
+                fov_map_path = self.map_and_save_focus_fovs(candidate_fovs, image_dir)
+                LOGGER.info(f"Autofocus:: FOV map saved to {fov_map_path}")
+            except Exception as e:
+                LOGGER.warning(f"Autofocus:: Failed to save FOV map: {e}")
 
         return opt_z
 

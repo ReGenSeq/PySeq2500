@@ -289,7 +289,7 @@ class TestAutofocus:
         """Test rough scan capture."""
 
         result = await af.capture_rough_scan()
-        assert result == af.roi.focus.output
+        assert result.parent == af.roi.focus.output
 
     async def test_find_candidate_fovs_no_images(self, af):
         """Test FOV detection with no images."""

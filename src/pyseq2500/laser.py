@@ -24,7 +24,7 @@ class EmulatedLaser(EmulatedSerialCOM):
     off_pattern: re.Pattern = field(default=re.compile(r"OFF"))
     power_pattern: re.Pattern = field(default=re.compile(r"POWER=?(\d*)?"))
 
-    async def command(self, command: str, read: bool = True) -> str:
+    async def command(self, command: str, read: bool = True, **kwargs) -> str:
         """
         Asynchronously emulate sending commands and receiving response from laser.
 
