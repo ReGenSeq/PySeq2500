@@ -212,15 +212,15 @@ class Microscope(BaseMicroscope):
         tilt_pos = range(tilt_init, tilt_last, tilt_step)
         nt = len(tilt_pos)
         for i, _t in enumerate(tilt_pos):
-            await self.TiltStage.move()
+            await self.TiltStage.move(_t)
             LOGGER.info(f"Scanning {name} tilt position {_t} ({i + 1}/{nt})")
             _x = range(x_init, x_last, x_step)
             nx = len(_x)
             for ii, x in enumerate(_x):
                 await self.XStage.move(x)
-                name = f"s{name}_x{x}_z{_t}"
+                _name = f"s{name}_x{x}_z{_t}"
                 reset_y = ii < nx - 1 or i < nt - 1
-                await self._capture(roi, name, reset_y=reset_y, **kwargs)
+                await self._capture(roi, _name, reset_y=reset_y, **kwargs)
 
     @check_name
     async def _z_stack(

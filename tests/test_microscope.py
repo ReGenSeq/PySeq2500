@@ -209,9 +209,9 @@ class TestMicroscope:
                 fc_A_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
             )
             c = 0
-            for n in range(fc_A_roi.stage.nx):
-                x_pos = n * fc_A_roi.stage.x_step + x
-                for t in range(tilt_init, tilt_last, tilt_step):
+            for t in range(tilt_init, tilt_last, tilt_step):
+                for n in range(fc_A_roi.stage.nx):
+                    x_pos = n * fc_A_roi.stage.x_step + x
                     im_name = f"s{name}_x{x_pos}_z{t}"
                     assert mock_save_image.call_args_list[c].args[0] == im_name
                     assert mock_save_image.call_args_list[c].args[1] == image_dir
@@ -223,11 +223,9 @@ class TestMicroscope:
             await microscope._tilt_stack(
                 fc_B_roi, tilt_init=tilt_init, tilt_last=tilt_last, tilt_step=tilt_step
             )
-            for n in range(fc_B_roi.stage.nx):
-                x_pos = n * fc_B_roi.stage.x_step + x
-                for n, t in enumerate(range(tilt_init, tilt_last, tilt_step)):
+            for n, t in enumerate(range(tilt_init, tilt_last, tilt_step)):
+                for n in range(fc_B_roi.stage.nx):
+                    x_pos = n * fc_B_roi.stage.x_step + x
                     im_name = f"s{name}_x{x_pos}_z{t}"
-                    print(image_dir)
-                    print(im_name)
                     written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
                     assert len(written_files) == 4
