@@ -1,6 +1,6 @@
 from pyseq_core.base_instruments import BaseLaser
 import logging
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, validate_and_retry
 from attrs import define, field
 import re
 
@@ -153,14 +153,20 @@ class Laser(BaseLaser):
             await self.command(f"POWER={power}", read=False)
         await self.get_power()
 
+    @validate_and_retry(pattern=r"\d+mW")
+    async def _query_power(self):
+        return await self.command("POWER?")
+
     async def get_power(self):
         """Gets the current power of the laser.
 
         Returns:
             int: The current power level of the laser.
         """
-        response = await self.command("POWER?")
+
+        response = await self._query_power()
         self._power = int(response.split("mW")[0])
+
         if self._status and self.power < 0:
             LOGGER.warning(f"{self.color} Laser is at 0 mW power.")
 

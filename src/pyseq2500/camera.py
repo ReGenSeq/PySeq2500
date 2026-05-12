@@ -31,15 +31,15 @@ class EmulatedTDICamera:
         LOGGER.debug(f"Saving {image_path}/c{self.right_emission}_{image_name}.tiff")
         return 1
 
-    def setPropertyValue(self, property, value):
-        self.properties[property] = value
+    def setPropertyValue(self, prop, value):
+        self.properties[prop] = (value, type(value))
 
-    def getPropertyValue(self, property):
-        if property in self.properties:
-            val = self.properties[property]
+    def getPropertyValue(self, prop):
+        if prop in self.properties:
+            val = self.properties[prop]
         else:
             val = (1.0, 1.0)
-            self.properties[property] = val
+            self.properties[prop] = val
         return val
 
     def get_status(self):
@@ -251,11 +251,11 @@ class TDICameras(BaseCamera):
         The minimum interval that you can set is 20 μs.
 
         Args:
-            exposure (float | dict[str, float]): The desired exposure time in microseconds,
+            exposure (float | dict[str, float]): The desired exposure time in milliseconds,
                 or a dict mapping camera names to exposure times.
 
         Returns:
-            List[float]: The set exposure times in microseconds.
+            List[float]: The set exposure times in milliseconds.
         """
         if isinstance(exposure, dict):
             for cam in self.cams.values():

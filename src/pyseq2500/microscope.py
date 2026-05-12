@@ -11,6 +11,7 @@ from pyseq2500.camera import TDICameras
 from pyseq2500.fpga import FPGA
 from pyseq2500.com import COM_DICT
 from pyseq2500.utils import DEFAULT_CONFIG
+from pyseq2500.autofocus import autofocus
 
 from pre.image_analysis import HiSeqImages
 from xarray import DataArray
@@ -212,7 +213,7 @@ class Microscope(BaseMicroscope):
         tilt_pos = range(tilt_init, tilt_last, tilt_step)
         nt = len(tilt_pos)
         for i, _t in enumerate(tilt_pos):
-            await self.TiltStage.move()
+            await self.TiltStage.move(_t)
             LOGGER.info(f"Scanning {name} tilt position {_t} ({i + 1}/{nt})")
             _x = range(x_init, x_last, x_step)
             nx = len(_x)
@@ -356,22 +357,19 @@ class Microscope(BaseMicroscope):
         setup = []
         setup.append(self.Camera.check_free())
         setup.append(self.Camera.allocate("AREA", n_frames))
-        setup.append(self.ZStage.set_velocity(self.ZStage.min_velocity))
+        setup.append(self.ZStage.set_velocity(velocity))
         setup.append(self.ZStage.move(min(self.ZStage.min_position, z_init)))
         await asyncio.gather(*setup)
-        await self.ZStage.set_velocity(velocity)
         z_pos = self.focus_z_positions(z_init, z_last, n_frames)
-
-        # Update limits that were previously based on estimates
-        # obj.update_focus_limits(cam_interval = cam1.getFrameInterval(),
-        #                         range = obj.focus_range,
-        #                         spacing = obj.focus_spacing)
 
         # Start acquiring focus stack
         await self.ZStage.set_trigger(z_init)
         await self.Shutter.open()
         try:
-            start = [self.ZStage.move(z_last, read=2), self.Camera.startAcquisition()]
+            start = [
+                self.Camera.startAcquisition(),
+                self.ZStage.move(max(self.ZStage.max_position, z_last), read=2),
+            ]
             await asyncio.gather(*start)
         except asyncio.TimeoutError:
             LOGGER.warning("Objective took too long to move.")
@@ -410,34 +408,24 @@ class Microscope(BaseMicroscope):
         for color in self.Lasers:
             _.append(self.Lasers[color].set_power(params["power"][color]))
             _.append(self.FilterWheels[color].set_filter(params["filter"][color]))
-        # if "exposure" in params:
-        #     _.append(self.Camera.set_exposure(params["exposure"]))
+        if "exposure" in params:
+            _.append(self.Camera.set_exposure(params["exposure"]))
         await asyncio.gather(*_)
 
-    async def _find_focus(self, roi: BaseROI):
+    async def _find_focus(self, roi: BaseROI) -> BaseROI:
         """Async set the parameters for the ROI."""
 
-        # Setup out of focus scan to find FOVs to focus ons
-        setup = [
-            self._move(**roi.stage.model_dump()),
-            self._set_parameters(roi.focus.optics),
-        ]
-        await asyncio.gather(*setup)
+        if "once" not in roi.focus.routine or roi.focus.z_focus is None:
+            roi.focus.z_focus = await autofocus(self, roi)
+            roi.image.z_init = roi.focus.z_focus - roi.image.z_step // 2 * roi.image.nz
+            await self._move(x=roi.image.x_init, y=roi.image.y_init, z=roi.image.z_init)
+            return roi.focus.z_focus
 
-        # Acquire out of focus scan
-        await self._scan(
-            roi,
-            name=f"RoughScan_{roi.name}",
-            image_dir=roi.focus.output,  # change to image_dir in pyseq_core
-            z_last=roi.stage.z_init + 1,
-        )
-
-        return True
-
-        # Reset X & Y stage to initial position after finding focus
-        # Save Z stage focus position to `ROI.focus.z_focus`
-        # Move Z stage to `ROI.focus.z_focus`
-        # pass
+        elif "once" in roi.focus.routine and roi.focus.z_focus is not None:
+            LOGGER.debug(
+                f"Using previously acquired focus position {roi.focus.z_focus}"
+            )
+            return roi
 
     def px_to_step(
         self, px_row: int, px_col: int, roi: BaseROI, scale: int = 1

@@ -123,7 +123,7 @@ class Autofocus:
         self.focus_df: pd.DataFrame = get_empty_focus_df()
         self.fov_shape = None  # (height, width) from focus stack images
         self.optimal_z = None  # Final optimal Z position
-        self.inlier_mask = None  # Boolean mask for inlier FOVs
+        # self.inlier_mask = None  # Boolean mask for inlier FOVs
 
         # Focus parameters from ROI
         self.focus_output = roi.focus.output if roi.focus.output else Path(".")
@@ -145,8 +145,8 @@ class Autofocus:
 
         # Make roi specific image directory
         timestamp = datetime.now().strftime("%Y%m%d%H%M")
-        img_dir = Path(roi.focus.output) / f"{roi.name}_{timestamp}"
-        img_dir.mkdir(parents=True, exist_ok=True)
+        self.focus_output = Path(roi.focus.output) / f"{roi.name}_{timestamp}"
+        self.focus_output.mkdir(parents=True, exist_ok=True)
 
         # Move to ROI
         await self.microscope._move(
@@ -158,7 +158,7 @@ class Autofocus:
             tilt3=roi.stage.tilt3,
         )
 
-        # Set laser power and laser filters
+        # Set laser power, laser filters, and exposure
         await self.microscope._set_parameters(roi.focus.optics)
 
         # Set Z position slightly out of focus for rough scan
@@ -168,22 +168,24 @@ class Autofocus:
         await self.microscope._scan(
             roi=roi,
             name=f"RoughScan{roi.name}",
-            image_dir=img_dir,
+            image_dir=self.focus_output,
             z_last=z_last,
         )
 
-        return img_dir
+        return self.focus_output
 
-    def load_and_process_images(self, image_dir: Union[str, Path]):
+    def load_and_process_images(self, image_dir: Union[str, Path, None]):
         """Load and process rough scan images.
 
         Args:
             image_dir: Directory containing rough scan images
 
         Returns:
-            HiSeqImages object with loaded images
+            HiSeqImages object with loaded
         """
-        image_dir = Path(image_dir)
+
+        if image_dir is None:
+            image_dir = self.focus_output
 
         LOGGER.info(f"Autofocus:: Loading images from {image_dir}")
 
@@ -415,10 +417,6 @@ class Autofocus:
         # Store FOV dimensions from focus stack images for visualization
         if self.fov_shape is None and focus_stack.size > 0:
             self.fov_shape = (len(focus_stack.row), len(focus_stack.col))
-
-            # first_img = focus_stack.data[0,0]
-            # if first_img is not None:
-            #     self.fov_shape = first_img.shape  # (height, width)
 
         # Find best Z position
         fov_label = f"r{fov.px_row}_c{fov.px_col}"
@@ -991,10 +989,10 @@ class Autofocus:
         LOGGER.debug(f"Autofocus:: need {n_markers} FOVs for consesus focal plane")
 
         # Step 1: Capture rough scan
-        image_dir = await self.capture_rough_scan(froi)
+        img_dir = await self.capture_rough_scan(froi)
 
         # Step 2: Load and process images
-        self.load_and_process_images(image_dir)
+        self.load_and_process_images(img_dir)
 
         # Step 3: Find candidate FOVs
         candidate_fovs = self.find_candidate_fovs(n_candidates=n_markers * 10)
@@ -1031,12 +1029,7 @@ class Autofocus:
 
                 if model is not None:
                     LOGGER.info("Autofocus:: Found consensus focal plane")
-                    x0 = roi.stage.x_init
-                    x1 = roi.stage.x_last
-                    y0 = roi.stage.y_init
-                    y1 = roi.stage.y_last
-                    xy = pd.DataFrame({"x": [x0, x0, x1, x1], "y": [y0, y1, y0, y1]})
-                    opt_z = round(model.predict(xy).mean())
+                    opt_z = round(model.predict(self.focus_df[["x", "y"]]).mean())
 
                 else:
                     # No consesus keep iterating through more fovs
@@ -1067,7 +1060,7 @@ class Autofocus:
         # Generate and save FOV map visualization
         if getattr(self.roi.focus, "plot_data", True):
             try:
-                fov_map_path = self.map_and_save_focus_fovs(candidate_fovs, image_dir)
+                fov_map_path = self.map_and_save_focus_fovs(candidate_fovs, img_dir)
                 LOGGER.info(f"Autofocus:: FOV map saved to {fov_map_path}")
             except Exception as e:
                 LOGGER.warning(f"Autofocus:: Failed to save FOV map: {e}")
