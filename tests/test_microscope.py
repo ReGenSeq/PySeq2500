@@ -187,6 +187,7 @@ class TestMicroscope:
         focus_stack = await microscope._focus_stack(2000, 62000, 200)
         assert focus_stack.shape == (4, 200, 16, 2048)
 
+    @pytest.mark.hardware
     async def test_find_focus(self, microscope: Microscope, fc_A_roi):
         assert await microscope._find_focus(fc_A_roi)
 

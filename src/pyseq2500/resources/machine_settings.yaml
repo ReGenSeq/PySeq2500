@@ -139,8 +139,7 @@ Test:                                                                           
       prefix: ""
       suffix: "\n"  
   TiltStage: &tiltstage
-    com:
-      <<: *fpgacom
+    com: FPGA
     spum: 0.656                                                                 # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     position: &tiltposition                                                     # &tiltposition anchor for future reference
       min_val: 0
@@ -151,13 +150,12 @@ Test:                                                                           
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             
   ZStage:
-    com:
-      <<: *fpgacom                                                              # shares communication address with `TiltStage`
+    com: FPGA                                                         # shares communication address with `TiltStage`
     spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     step: 235                                                                   # steps between z planes used in microscope z-stack routiness based on Nyquist sampling
     position:
-      min_val: 0
-      max_val: 65535
+      min_val: 1000
+      max_val: 65000
       units: steps
     velocity: 
       min_val: 0.1
@@ -195,21 +193,17 @@ Test:                                                                           
       units: C
   TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
   Shutter:
-    com:
-      <<: *fpgacom
+    com: FPGA
   EmissionFilter:
-    com:
-      <<: *fpgacom
+    com: FPGA
     filter: &emission_filter
       valid_list: {'in':'I', 'out':'O'}
   RedFilterWheel: 
-    com:
-      <<: *fpgacom
+    com: FPGA
     filter: &red_filter_wheel                                                   # &red_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.0':36, '2.4':71, '0.2':-107, 'open':143, '1.0':107, '0.6':-36, '0.5':-71}
   GreenFilterWheel: 
-    com:
-      <<: *fpgacom
+    com: FPGA
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}          
 # Extra validation parameters for stage beyond X, Y, Z 

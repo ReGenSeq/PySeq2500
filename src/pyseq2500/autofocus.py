@@ -531,7 +531,7 @@ class Autofocus:
         if getattr(self.roi.focus, "plot_data", False):
             self._plot_focus_metric(formatted, popt, best_z, fov_label)
 
-        ztype = type(self.microscope.ZStage.config["position"]["max_val"])
+        ztype = type(self.microscope.ZStage.max_position)
 
         return ztype(best_z)
 
@@ -737,7 +737,8 @@ class Autofocus:
         # Default output path
         if output_path is None:
             output_path = self.focus_output / f"FOV_Map_{self.roi.name}.png"
-        output_path = Path(output_path)
+        else:
+            output_path = Path(output_path) / f"FOV_Map_{self.roi.name}.png"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Get FOV dimensions from focus stack images

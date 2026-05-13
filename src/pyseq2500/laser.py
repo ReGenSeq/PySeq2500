@@ -146,7 +146,7 @@ class Laser(BaseLaser):
         """
 
         if not self._status:
-            await self.command("ON", timeout=2)  # turn on the laser
+            await self.command("ON", read=False)  # turn on the laser
             await self.status()  # update status
 
         if self.power != power:

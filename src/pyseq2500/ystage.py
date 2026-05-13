@@ -146,7 +146,7 @@ class YStage(BaseStage):
         return 0
 
     async def initialize(self):
-        await self.command("Z", read=4, delay=2)  # Initialize/Reset Stage
+        await self.command("Z", read=3, delay=2)  # Initialize/Reset Stage
         await self.command("W(EX,0)")  # Turn off echo mode
         await self.set_mode("moving")  # Set gains and velocity to moving mode
         await self.com.write("MA")  # Set to absolute positioning mode

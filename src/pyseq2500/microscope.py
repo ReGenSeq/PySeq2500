@@ -347,9 +347,9 @@ class Microscope(BaseMicroscope):
             n_frames = DEFAULT_CONFIG["focus"]["n_frames"]
         if velocity == 0.0:
             velocity = DEFAULT_CONFIG["focus"]["velocity"]
-        if z_init is None:
+        if z_init is None or z_init < self.ZStage.config["focus_start"]:
             z_init = self.ZStage.config["focus_start"]
-        if z_last is None:
+        if z_last is None or z_last < self.ZStage.config["focus_stop"]:
             z_last = self.ZStage.config["focus_stop"]
 
         # Setup camera, move objective to initial position and set velocity
@@ -358,7 +358,7 @@ class Microscope(BaseMicroscope):
         setup.append(self.Camera.check_free())
         setup.append(self.Camera.allocate("AREA", n_frames))
         setup.append(self.ZStage.set_velocity(velocity))
-        setup.append(self.ZStage.move(min(self.ZStage.min_position, z_init)))
+        setup.append(self.ZStage.move(self.ZStage.min_position))
         await asyncio.gather(*setup)
         z_pos = self.focus_z_positions(z_init, z_last, n_frames)
 
@@ -368,7 +368,7 @@ class Microscope(BaseMicroscope):
         try:
             start = [
                 self.Camera.startAcquisition(),
-                self.ZStage.move(max(self.ZStage.max_position, z_last), read=2),
+                self.ZStage.move(self.ZStage.max_position),
             ]
             await asyncio.gather(*start)
         except asyncio.TimeoutError:
@@ -417,7 +417,7 @@ class Microscope(BaseMicroscope):
 
         if "once" not in roi.focus.routine or roi.focus.z_focus is None:
             roi.focus.z_focus = await autofocus(self, roi)
-            roi.image.z_init = roi.focus.z_focus - roi.image.z_step // 2 * roi.image.nz
+            roi.image.z_init = roi.focus.z_focus - roi.stage.z_step // 2 * roi.image.nz
             await self._move(x=roi.image.x_init, y=roi.image.y_init, z=roi.image.z_init)
             return roi.focus.z_focus
 
