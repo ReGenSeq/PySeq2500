@@ -417,15 +417,11 @@ class Microscope(BaseMicroscope):
 
         if "once" not in roi.focus.routine or roi.focus.z_focus is None:
             roi.focus.z_focus = await autofocus(self, roi)
-            roi.image.z_init = roi.focus.z_focus - roi.stage.z_step // 2 * roi.image.nz
-            await self._move(x=roi.image.x_init, y=roi.image.y_init, z=roi.image.z_init)
-            return roi.focus.z_focus
-
+            roi.stage.z_init = roi.focus.z_focus - roi.stage.z_step // 2 * roi.image.nz
         elif "once" in roi.focus.routine and roi.focus.z_focus is not None:
-            LOGGER.debug(
-                f"Using previously acquired focus position {roi.focus.z_focus}"
-            )
-            return roi
+            LOGGER.debug(f"Using previous focus position {roi.focus.z_focus}")
+        await self._move(x=roi.stage.x_init, y=roi.stage.y_init, z=roi.stage.z_init)
+        return roi
 
     def px_to_step(
         self, px_row: int, px_col: int, roi: BaseROI, scale: int = 1
