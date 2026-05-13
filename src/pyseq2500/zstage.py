@@ -1,6 +1,6 @@
 import logging
 from pyseq_core.base_instruments import BaseStage
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, validate_and_retry
 from attrs import define, field
 import re
 import asyncio
@@ -130,6 +130,10 @@ class ZStage(BaseStage):
                 else:
                     self._status = False
 
+    @validate_and_retry(pattern=r"ZDACR\s+(\d+)")
+    async def _query_position(self):
+        return await self.command("ZDACR")
+
     async def get_position(self):
         """Retrieve the current actual position of the motor.
 
@@ -140,7 +144,7 @@ class ZStage(BaseStage):
         attempts = 0
         while attempts < 3:
             try:
-                position = await self.command("ZDACR")
+                position = await self._query_position()
                 self._position = int(position.split(" ")[1])
                 self._status = True
                 return self._position

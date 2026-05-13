@@ -153,8 +153,10 @@ class SerialCOM(BaseCOM):
         LOGGER.warning(f"{self.name} :: clearing responses")
         for i in range(lines):
             response = await self.rx.readline_async(size=-1)
+            LOGGER.debug(f"{self.name} :: rx :: {response}")
         while len(response) > 0:
             response = await self.rx.readline_async(size=-1)
+            LOGGER.debug(f"{self.name} :: rx :: {response}")
 
     async def command(self, command: str, read=True, delay=0.1, timeout=10) -> str:
         async with self.lock:

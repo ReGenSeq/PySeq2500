@@ -239,7 +239,7 @@ class Microscope(BaseMicroscope):
             z_init = roi.stage.z_init
 
         if z_last == -1 and roi is not None:
-            z_last = roi.stage.z_last
+            z_last = roi.stage.z_last + 1
 
         if z_step == 0 and roi is not None:
             z_step = roi.stage.z_step
@@ -368,7 +368,7 @@ class Microscope(BaseMicroscope):
         try:
             start = [
                 self.Camera.startAcquisition(),
-                self.ZStage.move(self.ZStage.max_position),
+                self.ZStage.move(self.ZStage.max_position, read=2),
             ]
             await asyncio.gather(*start)
         except asyncio.TimeoutError:
