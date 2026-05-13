@@ -479,6 +479,46 @@ class TestRoughScanFOVIdentification:
         assert len(fovs_scale_2) > 0
 
 
+def make_lorentzian_data(amp, ctr, wid, off, z_min=2000, z_max=62000, n=60):
+    """Synthetic focus data following a Lorentzian, normalized to max=1.0."""
+    z = np.linspace(z_min, z_max, n)
+    focus = off + amp * (1 / (1 + ((z - ctr) / wid) ** 2))
+    focus = focus / focus.max()
+    return np.vstack((z, focus)).T
+
+
+class TestFitLorentzian:
+    """Tests for fit_lorentzian quality checks."""
+
+    @pytest.fixture
+    def af_mock(self, mock_microscope, fc_A_roi):
+        mock_microscope.ZStage.spum = 262
+        mock_microscope.ZStage.config = {"step": 1}
+        return Autofocus(mock_microscope, fc_A_roi)
+
+    def test_good_focal_point(self, af_mock):
+        # Sharp peak well within scan range: wid=2000 << 3 * 5.0 * 262 = 3930
+        data = make_lorentzian_data(amp=0.9, ctr=35000, wid=2000, off=0.05)
+        best_z, popt = af_mock.fit_lorentzian(data)
+        assert best_z is not None
+        assert popt is not None
+        assert abs(best_z - 35000) < 500
+
+    def test_low_contrast_rejected(self, af_mock):
+        # Slope artifact: amp < off (0.35 < 0.6), no real focal peak
+        data = make_lorentzian_data(amp=0.35, ctr=8000, wid=40000, off=0.6)
+        best_z, popt = af_mock.fit_lorentzian(data)
+        assert best_z is None
+        assert popt is None
+
+    def test_wide_peak_rejected(self, af_mock):
+        # High contrast but wid=30000 >> 3 * 5.0 * 262 = 3930
+        data = make_lorentzian_data(amp=0.7, ctr=35000, wid=30000, off=0.1)
+        best_z, popt = af_mock.fit_lorentzian(data)
+        assert best_z is None
+        assert popt is None
+
+
 class TestFocusFOV:
     @staticmethod
     def make_synthetic_fov(

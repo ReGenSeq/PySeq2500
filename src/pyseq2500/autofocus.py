@@ -585,6 +585,21 @@ class Autofocus:
                 )
                 return z[np.argmax(focus)], None
 
+            # Reject slope/artifact fits: no real focal peak present.
+            # Returns (None, None) so evaluate_fov skips this FOV entirely.
+            tolerance_steps = self.roi.focus.tolerance * self.microscope.ZStage.spum
+            insufficient_contrast = amp < off  # baseline dominates peak signal
+            width_too_large = (
+                wid_fit > 3 * tolerance_steps
+            )  # peak spans >> depth of field
+
+            if insufficient_contrast or width_too_large:
+                LOGGER.warning(
+                    f"Autofocus:FitLorentzian: Rejecting low-quality focal point "
+                    f"(amp={amp:.3f}, off={off:.3f}, ctr={ctr:.0f}, wid={wid_fit:.0f})"
+                )
+                return None, None
+
             return ctr, popt
         except ValueError as e:
             LOGGER.error(e)
