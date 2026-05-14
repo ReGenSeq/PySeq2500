@@ -705,7 +705,7 @@ class Autofocus:
             # Get inlier mask
             inlier_mask = model.named_steps["ransacregressor"].inlier_mask_
             focus_df["inlier"] = inlier_mask
-            self.focus_df = focus_df
+            self.focus_df.loc[focus_df.index, "inlier"] = focus_df["inlier"]
             n_inliers = np.sum(inlier_mask)
 
             LOGGER.debug(f"Autofocus:: RANSAC found {n_inliers}/{n_total} inliers")
@@ -1030,14 +1030,12 @@ class Autofocus:
             fov = candidate_fovs[idx]
             fov = await self.evaluate_fov(fov, froi)
 
+            evaluated_fovs.append(fov)
+            n_evaluted = len(self.focus_df) + len(evaluated_fovs)
             if fov.z is not None:
-                evaluated_fovs.append(fov)
-                n_evaluted = len(self.focus_df) + len(evaluated_fovs)
                 LOGGER.info(f"Autofocus:: Found {n_evaluted}/{n_fovs} focus points")
             else:
-                self.focus_df = pd.concat(
-                    [self.focus_df, pd.DataFrame([fov])], ignore_index=True
-                )
+                batch_size += 2
 
             if len(evaluated_fovs) >= batch_size:
                 # Try RANSAC with current points
