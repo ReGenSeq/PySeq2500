@@ -45,22 +45,6 @@ matplotlib.use("Agg")  # Non-interactive backend
 
 LOGGER = logging.getLogger("PySeq")
 
-# @define
-# class FocusFOV:
-#     row_offset: int = field()
-#     col_offset: int = field()
-#     tile: Union[DataArray, np.ndarray]  = field()
-#     px_row: int = field(default=None)
-#     px_col: int = field(default=None)
-#     kurtosis: float = field(default=None)
-#     nv: float = field(default=None) # normalized variance
-#     score: float = field(default=None) # kurtosis * nv
-#     x: Union[float, int] = field(default=None) # x stage step
-#     y: Union[float, int] = field(default=None) # y stage step
-#     z: Union[float, int] = field(default=None) # best z
-#     rank: int = field(default=None)
-#     inlier: bool = field(default=False)
-
 
 @dataclass
 class FocusFOV:
@@ -523,12 +507,11 @@ class Autofocus:
 
         # Fit lorentzian
         best_z, popt = self.fit_lorentzian(formatted)
+        if popt is not None and getattr(self.roi.focus, "plot_data", False):
+            self._plot_focus_metric(formatted, popt, best_z, fov_label)
 
         if best_z is None:
             return None
-
-        if getattr(self.roi.focus, "plot_data", False):
-            self._plot_focus_metric(formatted, popt, best_z, fov_label)
 
         ztype = type(self.microscope.ZStage.max_position)
 
@@ -569,35 +552,32 @@ class Autofocus:
             )
             LOGGER.debug(f"Autofocus:FitLorentzian: Success: {mesg}")
 
-            # Validate fit quality
+            # Validate fit quality & Reject slope/artifact fits: no real focal peak present.
+            # Returns (None, popt) so evaluate_fov can plot data but not process fov.
             amp, ctr, wid_fit, off = popt
             focus_start = self.microscope.ZStage.config.get("focus_start", -np.inf)
             focus_stop = self.microscope.ZStage.config.get("focus_stop", np.inf)
             peak_too_small = amp < 0.1
             ctr_out_of_range = not (focus_start <= ctr <= focus_stop)
             bad_width = wid_fit <= 0
-
-            if peak_too_small or ctr_out_of_range or bad_width:
-                LOGGER.warning(
-                    f"Autofocus:FitLorentzian: Poor fit (amp={amp:.3f}, "
-                    f"ctr={ctr:.0f}, wid={wid_fit:.0f}). Falling back to largest focus metric."
-                )
-                return z[np.argmax(focus)], None
-
-            # Reject slope/artifact fits: no real focal peak present.
-            # Returns (None, None) so evaluate_fov skips this FOV entirely.
             tolerance_steps = self.roi.focus.tolerance * self.microscope.ZStage.spum
             insufficient_contrast = amp < off  # baseline dominates peak signal
             width_too_large = (
                 wid_fit > 3 * tolerance_steps
             )  # peak spans >> depth of field
 
-            if insufficient_contrast or width_too_large:
+            if (
+                insufficient_contrast
+                or width_too_large
+                or peak_too_small
+                or ctr_out_of_range
+                or bad_width
+            ):
                 LOGGER.warning(
                     f"Autofocus:FitLorentzian: Rejecting low-quality focal point "
                     f"(amp={amp:.3f}, off={off:.3f}, ctr={ctr:.0f}, wid={wid_fit:.0f})"
                 )
-                return None, None
+                return None, popt
 
             return ctr, popt
         except ValueError as e:
@@ -614,7 +594,7 @@ class Autofocus:
         self,
         focus_data: np.ndarray,
         popt: Optional[np.ndarray],
-        best_z: Union[int, float],
+        best_z: Union[int, float, None],
         fov_label: str = "",
     ) -> None:
         """Save a PNG of the focus metric vs z position with the fitted curve."""
@@ -633,13 +613,14 @@ class Autofocus:
                 label="Lorentzian fit",
             )
 
-        ax.axvline(
-            best_z,
-            color="gray",
-            linestyle="--",
-            linewidth=1,
-            label=f"best z = {best_z}",
-        )
+        if best_z is not None:
+            ax.axvline(
+                best_z,
+                color="gray",
+                linestyle="--",
+                linewidth=1,
+                label=f"best z = {best_z}",
+            )
         ax.set_xlabel("Z position (steps)")
         ax.set_ylabel("Focus metric (normalized)")
         ax.set_title(f"Focus metric — {fov_label}" if fov_label else "Focus metric")
@@ -1034,30 +1015,40 @@ class Autofocus:
             n_evaluted = len(self.focus_df) + len(evaluated_fovs)
             if fov.z is not None:
                 LOGGER.info(f"Autofocus:: Found {n_evaluted}/{n_fovs} focus points")
-            else:
-                batch_size += 2
 
             if len(evaluated_fovs) >= batch_size:
-                # Try RANSAC with current points
                 new_points = pd.DataFrame(evaluated_fovs)
                 self.focus_df = pd.concat(
                     [self.focus_df, new_points], ignore_index=True
                 )
-                model = self.ransac_focus(n_markers=n_markers)
+                n_good_fovs = self.focus_df["z"].notna().sum()
+                # Try RANSAC with current points
+                if n_good_fovs >= n_markers:
+                    model = self.ransac_focus(n_markers=n_markers)
 
-                if model is not None:
-                    LOGGER.info("Autofocus:: Found consensus focal plane")
-                    valid_df = self.focus_df[self.focus_df["z"].notna()]
-                    opt_z = round(model.predict(valid_df[["x", "y"]]).mean())
+                    if model is not None:
+                        LOGGER.info("Autofocus:: Found consensus focal plane")
+                        valid_df = self.focus_df[self.focus_df["z"].notna()]
+                        opt_z = round(model.predict(valid_df[["x", "y"]]).mean())
 
-                else:
-                    # No consesus keep iterating through more fovs
+                    else:
+                        # No consesus keep iterating through more fovs
+                        evaluated_fovs = []
+                        LOGGER.warning(
+                            "Autofocus:: Could not find consesus focal plane"
+                        )
+                        if idx < n_candidates - 1:
+                            batch_size = get_new_batch_size(n_good_fovs, n_markers)
+                            batch_size = min(batch_size, n_candidates - idx)
+                            n_fovs += batch_size
+                            LOGGER.info(
+                                "Autofocus:: Evaluate 2 additional focus points"
+                            )
+                elif idx < n_candidates - 1:
                     evaluated_fovs = []
-                    LOGGER.warning("Autofocus:: Could not find consesus focal plane")
-                    if idx < n_candidates - 1:
-                        batch_size = 2
-                        n_fovs += 2
-                        LOGGER.info("Autofocus:: Evaluate 2 additional focus points")
+                    batch_size = get_new_batch_size(n_good_fovs, n_markers)
+                    batch_size = min(batch_size, n_candidates - idx)
+                    n_fovs += batch_size
 
             idx += 1
 
@@ -1105,3 +1096,10 @@ async def autofocus(microscope, roi: BaseROI) -> Optional[int]:
     """
     af = Autofocus(microscope, roi)
     return await af.run(roi)
+
+
+def get_new_batch_size(n_good_fovs, n_markers):
+    if n_good_fovs < n_markers:
+        return n_markers - n_good_fovs
+    elif n_good_fovs >= n_markers:
+        return n_good_fovs % 2 + 1

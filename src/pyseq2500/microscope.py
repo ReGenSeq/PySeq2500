@@ -306,7 +306,6 @@ class Microscope(BaseMicroscope):
             _.append(self.YStage.move(y))
             msg += f" y={y}"
         if z is not None:
-            _.append(self.ZStage.move(z))
             msg += f" z={z}"
 
         if tilt > 0:
@@ -320,6 +319,10 @@ class Microscope(BaseMicroscope):
 
         LOGGER.debug(msg)
         await asyncio.gather(*_)
+
+        # Seperate z from tilt to avoid timeout on move command
+        if z is not None:
+            await self.ZStage.move(z)
 
     def focus_z_positions(self, z_init: int, z_last: int, n_frames: int) -> np.ndarray:
         """Calculate the z position of each frame for a focus stack."""
