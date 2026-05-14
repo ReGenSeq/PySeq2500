@@ -422,19 +422,18 @@ class Autofocus:
         fov_label = f"r{fov.px_row}_c{fov.px_col}"
         best_z = self.find_best_z(focus_stack, fov_label=fov_label)
 
+        fov.x = x_step
+        fov.y = y_step
+        fov.z = best_z
         if best_z is not None:
             LOGGER.debug(
                 f"Autofocus:EvaluateFocus: Found focus at x={x_step}, y={y_step}, z={best_z}"
             )
-            fov.x = x_step
-            fov.y = y_step
-            fov.z = best_z
-            return fov
         else:
             LOGGER.debug(
                 f"Autofocus:EvaluateFocus: No focus found at x={x_step}, y={y_step}"
             )
-            return None
+        return fov
 
     def format_focus_data(self, focus_stack: DataArray) -> Union[np.ndarray, bool]:
         """Format focus stack data for analysis using Tenengrad focus metric.
@@ -669,6 +668,7 @@ class Autofocus:
         if focus_df is None:
             focus_df = self.focus_df
 
+        focus_df = focus_df[focus_df["z"].notna()]
         n_total = len(focus_df)
         if n_total < 3:
             LOGGER.warning("Autofocus:: Not enough points for RANSAC")
@@ -1030,10 +1030,14 @@ class Autofocus:
             fov = candidate_fovs[idx]
             fov = await self.evaluate_fov(fov, froi)
 
-            if fov is not None:
+            if fov.z is not None:
                 evaluated_fovs.append(fov)
                 n_evaluted = len(self.focus_df) + len(evaluated_fovs)
                 LOGGER.info(f"Autofocus:: Found {n_evaluted}/{n_fovs} focus points")
+            else:
+                self.focus_df = pd.concat(
+                    [self.focus_df, pd.DataFrame([fov])], ignore_index=True
+                )
 
             if len(evaluated_fovs) >= batch_size:
                 # Try RANSAC with current points
@@ -1045,7 +1049,8 @@ class Autofocus:
 
                 if model is not None:
                     LOGGER.info("Autofocus:: Found consensus focal plane")
-                    opt_z = round(model.predict(self.focus_df[["x", "y"]]).mean())
+                    valid_df = self.focus_df[self.focus_df["z"].notna()]
+                    opt_z = round(model.predict(valid_df[["x", "y"]]).mean())
 
                 else:
                     # No consesus keep iterating through more fovs
@@ -1058,13 +1063,14 @@ class Autofocus:
 
             idx += 1
 
-        if len(self.focus_df) == 0:
+        valid_z = self.focus_df["z"].dropna()
+        if len(valid_z) == 0:
             LOGGER.error("Autofocus:: FAILED - Could not find any focus points")
             return None
 
         if model is None:
             LOGGER.warning("Autofocus:: No consesus focal plane, using median Z")
-            opt_z = int(np.median(self.focus_df["z"]))
+            opt_z = int(np.median(valid_z))
 
         # # Step 5: Calculate optimal Z from consensus
         self.optimal_z = opt_z
