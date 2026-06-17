@@ -2812,7 +2812,7 @@ wheels = [
 [[package]]
 name = "pyseq-core"
 version = "1.1.0a0"
-source = { git = "https://github.com/ReGenSeq/pyseq_core#12d6d1a70d7cb37dfdb3376c02f2eb766f527e97" }
+source = { git = "https://github.com/ReGenSeq/pyseq_core#668566fdaf122cc795cf04fa2483f37b0fc27e24" }
 dependencies = [
     { name = "attrs" },
     { name = "pre-commit" },
@@ -2825,8 +2825,8 @@ dependencies = [
 
 [[package]]
 name = "pyseq-image"
-version = "0.1.dev123+g6f4957462"
-source = { git = "https://github.com/nygctech/pyseq-image.git#6f495746291e538961ca29cc3c9d788214671268" }
+version = "0.1.dev125+ga39c152f3"
+source = { git = "https://github.com/nygctech/pyseq-image.git#a39c152f37d59f86960d53fba5054645ed8bafae" }
 dependencies = [
     { name = "dask" },
     { name = "dask-image" },
