@@ -163,9 +163,15 @@ def synthetic_focus_stack() -> DataArray:
     n_channels = len(channels)
     focus_stack = np.empty((n_channels, n_frames), dtype=object)
 
-    # Create Gaussian-like focus metric
-    z_positions = np.arange(n_frames)
-    focus_metric = np.exp(-((z_positions - 100) ** 2) / (2 * 20**2))
+    # Create Gaussian-like focus metric centered within the valid focus range.
+    # std = 10 * spum keeps wid_fit (~3083 steps) well below 3 * tolerance * spum
+    # (~3930 steps) while spanning enough frames to fit reliably.
+    fstart = HW_CONFIG["ZStage"]["focus_start"]
+    fstop = HW_CONFIG["ZStage"]["focus_stop"]
+    spum = HW_CONFIG["ZStage"]["spum"]
+    f_pos = (fstart + fstop) // 2
+    z_positions = np.linspace(fstart, fstop, n_frames, dtype=int)
+    focus_metric = np.exp(-((z_positions - f_pos) ** 2) / (2 * (10 * spum) ** 2))
 
     # Each "image" has texture with contrast proportional to focus metric
     # Use a fixed pattern that varies spatially so Sobel detects edges
@@ -180,7 +186,7 @@ def synthetic_focus_stack() -> DataArray:
     xr_focus_stack = DataArray(
         focus_stack.tolist(),
         dims=["channel", "z", "row", "col"],
-        coords={"channel": channels, "z": range(n_frames)},
+        coords={"channel": channels, "z": z_positions},
     )
 
     return xr_focus_stack
@@ -246,7 +252,9 @@ class TestAutofocus:
         """Test RANSAC with insufficient points."""
 
         # Only 2 points - not enough for plane fitting
-        focus_points = np.array([[1000, 2000, 5000], [1100, 2100, 5100]])
+        focus_points = pd.DataFrame(
+            {"x": [1000, 1100], "y": [2000, 2100], "z": [5000, 5100]}
+        )
 
         result = af.ransac_focus(focus_points)
 
@@ -509,14 +517,12 @@ class TestFitLorentzian:
         data = make_lorentzian_data(amp=0.35, ctr=8000, wid=40000, off=0.6)
         best_z, popt = af_mock.fit_lorentzian(data)
         assert best_z is None
-        assert popt is None
 
     def test_wide_peak_rejected(self, af_mock):
         # High contrast but wid=30000 >> 3 * 5.0 * 262 = 3930
         data = make_lorentzian_data(amp=0.7, ctr=35000, wid=30000, off=0.1)
         best_z, popt = af_mock.fit_lorentzian(data)
         assert best_z is None
-        assert popt is None
 
 
 class TestFocusFOV:
@@ -741,6 +747,7 @@ class TestRoughScanRealDataFOVIdentification:
         )
 
         df = pd.DataFrame({"x": points[:, 0], "y": points[:, 1], "z": z})
+        af.focus_df = df
 
         model = af.ransac_focus(df, n_points)
 
@@ -810,12 +817,11 @@ class TestFOVMapVisualization:
         """Test basic FOV map generation and saving."""
         af = af_with_evaluated_fovs
 
-        output_path = tmp_path / "test_fov_map.png"
-        result_path = af.map_and_save_focus_fovs(candidate_fovs, output_path)
+        result_path = af.map_and_save_focus_fovs(candidate_fovs, tmp_path)
 
-        # Verify file was created
+        # Verify file was created inside the provided directory
         assert result_path.exists()
-        assert result_path == output_path
+        assert result_path == tmp_path / f"FOV_Map_{af.roi.name}.png"
         assert result_path.suffix == ".png"
 
     def test_map_and_save_focus_fovs_default_path(

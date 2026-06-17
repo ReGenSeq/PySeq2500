@@ -203,11 +203,13 @@ Test:                                                                           
     filter: &emission_filter
       valid_list: {'in':'I', 'out':'O'}
   RedFilterWheel: 
-    com: FPGA
+    com:
+      address: FPGA
     filter: &red_filter_wheel                                                   # &red_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.0':36, '2.4':71, '0.2':-107, 'open':143, '1.0':107, '0.6':-36, '0.5':-71}
   GreenFilterWheel: 
-    com: FPGA
+    com:
+      address: FPGA
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}          
 # Extra validation parameters for stage beyond X, Y, Z 
@@ -230,4 +232,63 @@ Test:                                                                           
       green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
       red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`
       emission: *emission_filter
-
+  image:
+      background:
+        558: 126
+        610: 106
+        687: 100
+        740: 116
+      dark group:
+        558:
+          - 119
+          - 125
+          - 118
+          - 119
+          - 109
+          - 117
+          - 108
+          - 123
+        610:
+          - 89
+          - 101
+          - 95
+          - 94
+          - 103
+          - 105
+          - 100
+          - 96
+        687:
+          - 88
+          - 93
+          - 92
+          - 91
+          - 90
+          - 84
+          - 95
+          - 102
+        740:
+          - 111
+          - 105
+          - 109
+          - 95
+          - 121
+          - 119
+          - 101
+          - 95
+      max_pixel_value: 4095
+      std:
+        558: 1
+        610: 1
+        687: 1
+        740: 1
+      registration:
+        558:
+          - -2.09
+          - 0.85
+        687:
+          - 89.33
+          - -0.47
+        740:
+          - 89.39
+          - -0.2
+      updated: -1
