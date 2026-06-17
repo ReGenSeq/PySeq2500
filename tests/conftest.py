@@ -218,7 +218,7 @@ async def fc_A_roi(request, test_directory):
     focus_fields = {"output": str(test_directory / "focus"), "n_frames": 50}
     roi = CUSTOM_ROI(
         flowcell="A", LLx=17.462, LLy=35.5, URx=15.768, URy=34.252, overlap=0
-        )
+    )
 
     stage = PySeq2500.custom_roi_stage(roi)
 
@@ -256,14 +256,13 @@ async def microscope(request, fpga, focus_stack_data):
         fcom = EmulatedFPGA(address="FPGACOM")
         xcom = EmulatedXStage(name="XStage", address="XStageCOM")
         ycom = EmulatedYStage(name="YStage", address="YStageCOM")
-        zcom = EmulatedZStage(name="ZStage", address="ZStageCOM")
-        tcom = EmulatedTiltMotor(name="TiltStage", address="FPGA")
+        zcom = EmulatedZStage(name="FPGA", address="ZStageCOM")
         glcom = EmulatedLaser(name="GreenLaser", address="LaserCOM")
         rlcom = EmulatedLaser(name="RedLaser", address="LaserCOM")
-        gfwcom = EmulatedOptics(name="GreenFilterWheel", address="FPGA")
-        rfwcom = EmulatedOptics(name="RedFilterWheel", address="FPGA")
-        ecom = EmulatedOptics(name="EmissionFilter", address="FPGA")
-        scom = EmulatedOptics(name="Shutter", address="FPGA")
+        gfwcom = EmulatedOptics(name="FPGA", address="FPGACOM")
+        rfwcom = EmulatedOptics(name="FPGA", address="FPGACOM")
+        ecom = EmulatedOptics(name="FPGA", address="FPGACOM")
+        scom = EmulatedOptics(name="FPGA", address="FPGACOM")
         dcam = dcamCOM(emulated=True, focus_stack=focus_stack_data)
 
         instruments = {
@@ -271,7 +270,7 @@ async def microscope(request, fpga, focus_stack_data):
             "XStage": XStage(name="XStage", com=xcom),
             "YStage": YStage(name="YStage", com=ycom),
             "ZStage": ZStage(name="ZStage", com=zcom),
-            "TiltStage": TiltStage(name="TiltStage", com=tcom),
+            "TiltStage": TiltStage(name="TiltStage", com=fcom),
             "Lasers": {
                 "green": Laser(name="GreenLaser", com=glcom, color="green"),
                 "red": Laser(name="RedLaser", com=rlcom, color="red"),
@@ -288,13 +287,11 @@ async def microscope(request, fpga, focus_stack_data):
         # Emulated coms for 3 motors
         coms = {}
         for i in range(1, 4):
-            coms[i] = EmulatedTiltMotor(name=f"TiltMotor{i}", address="FPGA")
+            coms[i] = EmulatedTiltMotor(name="FPGA", address="FPGACOM", id=i)
             await coms[i].connect()
         # Assign emulated coms to fake stage motors
-        for id, com in coms.items():
-            instruments["TiltStage"].tilts[id] = TiltMotor(
-                name=f"TiltMotor{id}", com=com
-            )
+        for i, com in coms.items():
+            instruments["TiltStage"].tilts[i] = TiltMotor(name=f"TiltMotor{i}", com=com)
 
         m.instruments = instruments
         m.name = "MockMicroscope"

@@ -21,15 +21,12 @@ TiCR           -> Clear the motor count registers (use after TiHM)
 
 @define(kw_only=True)
 class EmulatedTiltMotor(EmulatedSerialCOM):
+    id: int = field()
     _position: str = field(default="DISABLED")
     move_pattern: re.Pattern = field(default=re.compile(r"T(\d)MOVETO (\d+)"))
     rd_pattern: re.Pattern = field(default=re.compile(r"T(\d)RD"))
     hm_pattern: re.Pattern = field(default=re.compile(r"T(\d)HM"))
     cr_pattern: re.Pattern = field(default=re.compile(r"T(\d)CR"))
-
-    @cached_property
-    def id(self):
-        return self.name[-1]
 
     async def command(self, command: str, read: bool = True, delay: int = 0) -> str:
         """

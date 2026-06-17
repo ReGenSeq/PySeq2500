@@ -139,7 +139,8 @@ Test:                                                                           
       prefix: ""
       suffix: "\n"  
   TiltStage: &tiltstage
-    com: FPGA
+    com:
+      address: FPGA
     spum: 0.656                                                                 # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     position: &tiltposition                                                     # &tiltposition anchor for future reference
       min_val: 0
@@ -150,7 +151,8 @@ Test:                                                                           
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             
   ZStage:
-    com: FPGA                                                         # shares communication address with `TiltStage`
+    com:                                                       # shares communication address with `TiltStage`
+      address: FPGA    
     spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     step: 235                                                                   # steps between z planes used in microscope z-stack routiness based on Nyquist sampling
     position:
@@ -193,9 +195,11 @@ Test:                                                                           
       units: C
   TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
   Shutter:
-    com: FPGA
+    com:
+      address: FPGA
   EmissionFilter:
-    com: FPGA
+    com:
+      address: FPGA
     filter: &emission_filter
       valid_list: {'in':'I', 'out':'O'}
   RedFilterWheel: 
