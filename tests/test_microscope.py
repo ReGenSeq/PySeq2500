@@ -109,7 +109,7 @@ from pathlib import Path
 @pytest.mark.microscope
 @pytest.mark.asyncio
 class TestMicroscope:
-    @pytest_asyncio.fixture(autouse=True)
+    @pytest_asyncio.fixture(scope="session", autouse=True)
     async def test_init(self, microscope: Microscope):
         await microscope._initialize()
         # await microscope._configure({})
@@ -164,12 +164,16 @@ class TestMicroscope:
             image_dir = Path(fc_A_roi.image.image_dir)
             mock_save_image = mocker.patch.object(microscope.Camera, "save_image")
             await microscope._scan(fc_A_roi)
-            assert mock_save_image.call_count == fc_A_roi.stage.nx
-            for n in range(fc_A_roi.stage.nx):
-                x_pos = n * fc_A_roi.stage.x_step + x
-                im_name = f"s{name}_x{x_pos}_z{z}"
-                assert mock_save_image.call_args_list[n].args[0] == im_name
-                assert mock_save_image.call_args_list[n].args[1] == image_dir
+            assert mock_save_image.call_count == fc_A_roi.stage.nx * fc_A_roi.stage.nz
+            ncall = 0
+            for nx in range(fc_A_roi.stage.nx):
+                x_pos = nx * fc_A_roi.stage.x_step + x
+                for nz in range(fc_A_roi.stage.nz):
+                    z_pos = nz * fc_A_roi.stage.z_step + z
+                    im_name = f"s{name}_x{x_pos}_z{z_pos}"
+                    assert mock_save_image.call_args_list[ncall].args[0] == im_name
+                    assert mock_save_image.call_args_list[ncall].args[1] == image_dir
+                    ncall += 1
         else:
             # Use fc_B_roi for actual sequence, because it is large enough that it won't throw a TDI error
             x = fc_B_roi.stage.x_init
@@ -177,11 +181,13 @@ class TestMicroscope:
             name = fc_B_roi.name
             image_dir = Path(fc_B_roi.image.image_dir)
             await microscope._scan(fc_B_roi)
-            for n in range(fc_B_roi.stage.nx):
-                x_pos = n * fc_B_roi.stage.x_step + x
-                im_name = f"s{name}_x{x_pos}_z{z}"
-                written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
-                assert len(written_files) == 4
+            for nx in range(fc_B_roi.stage.nx):
+                x_pos = nx * fc_B_roi.stage.x_step + x
+                for nz in range(fc_B_roi.stage.nz):
+                    z_pos = nz * fc_B_roi.stage.z_step + z
+                    im_name = f"s{name}_x{x_pos}_z{z_pos}"
+                    written_files = list(image_dir.glob(f"*_{im_name}.tiff"))
+                    assert len(written_files) == 4
 
     async def test_focus_stack(self, microscope: Microscope):
         focus_stack = await microscope._focus_stack(2000, 62000, 200)
