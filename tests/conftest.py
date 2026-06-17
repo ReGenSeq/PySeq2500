@@ -52,7 +52,9 @@ def rough_scan_data():
     rough_pooch = pooch.create(
         path=data_path,
         base_url="https://zenodo.org/record/19355899/files/",
-        registry={"RoughScan.tar.gz": None},  # None skips checksum for now
+        registry={
+            "RoughScan.tar.gz": "md5:6a846989e3b6eca9f4bcc7ac15225aed"
+        },  # None skips checksum for now
     )
 
     # Download the tarball (cached after first download)
@@ -218,7 +220,7 @@ async def fc_A_roi(request, test_directory):
     focus_fields = {"output": str(test_directory / "focus"), "n_frames": 50}
     roi = CUSTOM_ROI(
         flowcell="A", LLx=17.462, LLy=35.5, URx=15.768, URy=34.252, overlap=0
-        )
+    )
 
     stage = PySeq2500.custom_roi_stage(roi)
 

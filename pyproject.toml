@@ -44,10 +44,10 @@ dev = [
 ]
 
 [tool.uv.sources]
-#pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core"}
-#pyseq-image = { git = "https://github.com/nygctech/pyseq-image.git" }
-pyseq-image = { path = "../pyseq-image", editable = true }
-pyseq_core = { path = "../pyseq_core", editable = true }
+pyseq_core = { git = "https://github.com/ReGenSeq/pyseq_core"}
+pyseq-image = { git = "https://github.com/nygctech/pyseq-image.git" }
+#pyseq-image = { path = "../pyseq-image", editable = true }
+#pyseq_core = { path = "../pyseq_core", editable = true }
 
 [project.urls]
 Homepage = "https://github.com/PySeqEcosystem"

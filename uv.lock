@@ -2812,7 +2812,7 @@ wheels = [
 [[package]]
 name = "pyseq-core"
 version = "1.1.0a0"
-source = { editable = "../pyseq_core" }
+source = { git = "https://github.com/ReGenSeq/pyseq_core#12d6d1a70d7cb37dfdb3376c02f2eb766f527e97" }
 dependencies = [
     { name = "attrs" },
     { name = "pre-commit" },
@@ -2823,32 +2823,10 @@ dependencies = [
     { name = "tomlkit" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "attrs", specifier = ">=25.3.0" },
-    { name = "pre-commit", specifier = ">=4.2.0" },
-    { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pyserial", specifier = ">=3.5" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "ruff", specifier = ">=0.12.7" },
-    { name = "tomlkit", specifier = ">=0.13.3" },
-]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pre-commit", specifier = ">=4.2.0" },
-    { name = "pytest", specifier = ">=8.4.1" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0" },
-    { name = "pytest-cov", specifier = ">=6.2.1" },
-    { name = "ruff", specifier = ">=0.12.1" },
-    { name = "ty", specifier = ">=0.0.1a13" },
-]
-
 [[package]]
 name = "pyseq-image"
-version = "0.1.dev123+g6f4957462.d20260411"
-source = { editable = "../pyseq-image" }
+version = "0.1.dev123+g6f4957462"
+source = { git = "https://github.com/nygctech/pyseq-image.git#6f495746291e538961ca29cc3c9d788214671268" }
 dependencies = [
     { name = "dask" },
     { name = "dask-image" },
@@ -2860,23 +2838,6 @@ dependencies = [
     { name = "xarray" },
     { name = "zarr" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "dask" },
-    { name = "dask-image" },
-    { name = "numpy" },
-    { name = "ome-types" },
-    { name = "ome-zarr" },
-    { name = "pytest", marker = "extra == 'testing'" },
-    { name = "pytest-cov", marker = "extra == 'testing'" },
-    { name = "scikit-image" },
-    { name = "tabulate" },
-    { name = "tox", marker = "extra == 'testing'" },
-    { name = "xarray" },
-    { name = "zarr" },
-]
-provides-extras = ["testing"]
 
 [[package]]
 name = "pyseq2500"
@@ -2919,8 +2880,8 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=2.4.1" },
     { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pyseq-core", editable = "../pyseq_core" },
-    { name = "pyseq-image", editable = "../pyseq-image" },
+    { name = "pyseq-core", git = "https://github.com/ReGenSeq/pyseq_core" },
+    { name = "pyseq-image", git = "https://github.com/nygctech/pyseq-image.git" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "scikit-image", specifier = ">=0.21.0" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
