@@ -5,6 +5,8 @@ from typing import Union, List, Literal
 from pathlib import Path
 import ctypes
 from pyseq_core.dcam import DCAMException
+import asyncio
+import numpy as np
 
 LOGGER = logging.getLogger("PySeq")
 
@@ -19,6 +21,7 @@ class EmulatedTDICamera:
     status: int = field(default=3)
     properties: dict = field(factory=dict)
     number_image_buffers: int = field(default=0)
+    focus_stack: np.ndarray = field(default=None)
     left_emission: str = field(init=False)
     right_emission: str = field(init=False)
     sensor_mode: Literal["TDI", "AREA"] = field(default="TDI")
@@ -28,15 +31,16 @@ class EmulatedTDICamera:
         LOGGER.debug(f"Saving {image_path}/c{self.right_emission}_{image_name}.tiff")
         return 1
 
-    def setPropertyValue(self, property, value):
-        self.properties[property] = value
+    def setPropertyValue(self, prop, value):
+        self.properties[prop] = (value, type(value))
 
-    def getPropertyValue(self, property):
-        if property in self.properties:
-            return self.properties[property]
+    def getPropertyValue(self, prop):
+        if prop in self.properties:
+            val = self.properties[prop]
         else:
-            self.properties[property] = 1.0
-            return 1.0
+            val = (1.0, 1.0)
+            self.properties[prop] = val
+        return val
 
     def get_status(self):
         return 3
@@ -51,7 +55,7 @@ class EmulatedTDICamera:
 
     def setAREA(self):
         self.setPropertyValue("sensor_mode", 1)
-        self.setPropertyValue("sensor_mode_line_bundle_height", 128)
+        self.setPropertyValue("sensor_mode_line_bundle_height", 64)
         self.sensor_mode = "AREA"
 
     def captureSetup(self):
@@ -72,8 +76,43 @@ class EmulatedTDICamera:
     def getFrameCount(self) -> int:
         return self.number_image_buffers
 
-    def getFocusStack(self) -> list:
-        return [1]
+    def getFrameInterval(self) -> float:
+        return 0.040202
+
+    def getFocusStack(self) -> np.ndarray:
+        """Return focus stack adjusted to match number_image_buffers.
+
+        Uses cached Zenodo data. If cached data has more frames than requested,
+        truncates to requested number. If fewer, repeats last frame.
+        If number_image_buffers is 0, returns all cached frames.
+
+        Returns:
+            np.ndarray: Focus stack with shape (n_frames, 2), dtype=object,
+                        where each element is a 16x2048 uint16 array
+        """
+        if self.focus_stack is None:
+            # Return empty array if no focus stack data available
+            n_frames = self.number_image_buffers
+            focus_stack = np.empty((n_frames, 2), dtype=object)
+            for i in range(n_frames):
+                for j in range(2):
+                    focus_stack[i, j] = np.zeros((16, 2048), dtype=np.uint16)
+            return focus_stack
+
+        n_cached = self.focus_stack.shape[0]
+        n_requested = (
+            self.number_image_buffers if self.number_image_buffers > 0 else n_cached
+        )
+
+        if n_requested <= n_cached:
+            # Truncate - use first n_requested frames
+            return self.focus_stack[:n_requested]
+        else:
+            # Repeat last frame to match requested number
+            n_extra = n_requested - n_cached
+            last_frame = self.focus_stack[-1:]
+            extra_frames = np.repeat(last_frame, n_extra, axis=0)
+            return np.vstack([self.focus_stack, extra_frames])
 
 
 @define
@@ -81,6 +120,7 @@ class dcamCOM:
     _connected: bool = field(default=False)
     cams: dict[int, EmulatedTDICamera] = field(factory=dict)
     emulated: bool = field(default=False)
+    focus_stack: dict[int, np.ndarray] = field(default=None)
 
     @property
     def connected(self):
@@ -90,28 +130,29 @@ class dcamCOM:
         if not self.emulated:
             try:
                 self.emulated = False
-                from pyseq_core.dcam import HamamatsuCamera
-
-                dcam = ctypes.windll.dcamapi
-                temp = ctypes.c_int32(0)
-                if dcam.dcam_init(None, ctypes.byref(temp), None) != 1:
-                    raise DCAMException("DCAM initialization failed.")
-                n_cameras = temp.value
-                LOGGER.debug(f"DCAM found {n_cameras} cameras")
+                async with asyncio.timeout(60):
+                    n_cameras = await asyncio.to_thread(dcamCOM.dcam_init)
+                    LOGGER.debug(f"DCAM found {n_cameras} cameras")
             except AttributeError as e:
                 LOGGER.error(e)
                 LOGGER.warning("DCAM is not installed, okay for testing or no imaging")
                 self.emulated = True
-            except DCAMException as e:
+            except (DCAMException, asyncio.TimeoutError) as e:
                 LOGGER.error(e)
                 LOGGER.error("DCAM failed, restart system")
+                LOGGER.warning("Using emulated cameras")
                 self.emulated = True
 
         try:
+            from pyseq_core.dcam import HamamatsuCamera
+
             for i in range(2):
                 if i not in self.cams:
                     if self.emulated:
-                        self.cams[i] = EmulatedTDICamera(i)
+                        cam_focus_stack = None
+                        if self.focus_stack is not None and i in self.focus_stack:
+                            cam_focus_stack = self.focus_stack[i]
+                        self.cams[i] = EmulatedTDICamera(i, focus_stack=cam_focus_stack)
                         LOGGER.debug(f"Camera {i} connected to CAM{i}")
                     else:
                         self.cams[i] = HamamatsuCamera(i)
@@ -120,6 +161,14 @@ class dcamCOM:
         except DCAMException as e:
             LOGGER.error(e)
             LOGGER.error(f"DCAM could not connect to Camera {i}")
+
+    @staticmethod
+    def dcam_init():
+        dcam = ctypes.windll.dcamapi
+        temp = ctypes.c_int32(0)
+        if dcam.dcam_init(None, ctypes.byref(temp), None) != 1:
+            raise DCAMException("DCAM initialization failed.")
+        return temp.value
 
 
 @define(kw_only=True)
@@ -185,7 +234,9 @@ class TDICameras(BaseCamera):
             nbytes += cam.saveImage(image_name, image_dir)
         return nbytes
 
-    async def set_exposure(self, time: float) -> List[float]:
+    async def set_exposure(
+        self, exposure: Union[float, dict[str, float]]
+    ) -> List[float]:
         """Sets the exposure time (s) for the camera.
 
         The definition for exposure changes between TDI and AREA mode:
@@ -200,15 +251,27 @@ class TDICameras(BaseCamera):
         The minimum interval that you can set is 20 μs.
 
         Args:
-            time (float): The desired exposure time in seconds.
+            exposure (float | dict[str, float]): The desired exposure time in milliseconds,
+                or a dict mapping camera names to exposure times.
 
         Returns:
-            float: The set exposure time in seconds.
+            List[float]: The set exposure times in milliseconds.
         """
-        for i, cam in self.cams.items():
-            cam.setPropertyValue("exposure_time", time / 1000)
-            time = cam.getPropertyValue("exposure_time")
-            self._exposure[i] = time * 1000
+        if isinstance(exposure, dict):
+            for cam in self.cams.values():
+                cam_name = self.config[cam.camera_id]["name"]
+                if cam_name in exposure:
+                    time = exposure[cam_name]
+                    if time != self._exposure[cam.camera_id]:
+                        cam.setPropertyValue("exposure_time", time / 1000)
+                        time = cam.getPropertyValue("exposure_time")[0]
+                        self._exposure[cam.camera_id] = time * 1000
+        else:
+            for i, cam in self.cams.items():
+                if exposure != self._exposure[i]:
+                    cam.setPropertyValue("exposure_time", exposure / 1000)
+                    time = cam.getPropertyValue("exposure_time")[0]
+                    self._exposure[i] = time * 1000
         return self._exposure
 
     async def get_exposure(self) -> List[float]:
@@ -218,7 +281,7 @@ class TDICameras(BaseCamera):
             float: The current exposure time in seconds.
         """
         for i, cam in enumerate(self):
-            self._exposure[i] = cam.getPropertyValue("exposure_time") * 1000
+            self._exposure[i] = cam.getPropertyValue("exposure_time")[0] * 1000
         return self._exposure
 
     @property
@@ -234,7 +297,10 @@ class TDICameras(BaseCamera):
         """
         for i, cam in enumerate(self):
             self._gain[i] = cam.setPropertyValue("contrast_gain", gain)
-        return gain
+
+        await self.get_gain()
+
+        return self._gain
 
     async def get_gain(self):
         """Retrieves the current contrast enhancement gain from the camera.
@@ -243,7 +309,7 @@ class TDICameras(BaseCamera):
             int: The current contrast enhancement gain.
         """
         for i, cam in enumerate(self):
-            self._gain[i] = cam.getPropertyValue("contrast_gain")
+            self._gain[i] = cam.getPropertyValue("contrast_gain")[0]
         return self._gain
 
     async def capture(self):
@@ -321,3 +387,19 @@ class TDICameras(BaseCamera):
             nframes[camid] += cam.getFrameCount()
             LOGGER.debug(f"Camera{camid}:: Took {nframes[camid]} frames")
         return (nframes[0] + nframes[1]) / 2
+
+    async def waitForFrames(self, n_frames: int):
+        est_time = 0
+        for cam in self:
+            interval = cam.getFrameInterval()
+            est_time += interval * n_frames
+
+        async with asyncio.timeout(est_time):
+            while await self.getFrameCount() < n_frames:
+                await asyncio.sleep(0.5)
+
+    async def getFocusStack(self):
+        stack = []
+        for cam in self:
+            stack.append(cam.getFocusStack())
+        return np.hstack(stack)

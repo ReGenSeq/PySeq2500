@@ -1,6 +1,6 @@
 import logging
 from pyseq_core.base_instruments import BaseStage
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, validate_and_retry
 from attrs import define, field
 import re
 import asyncio
@@ -109,20 +109,30 @@ class ZStage(BaseStage):
         """Return cached status of objective."""
         return self._status
 
-    async def move(self, position: int):
+    async def move(self, position: int, read: int = 1):
         """Move the motor to the specified position.
+
+        Read 2 lines if moving objective after setting camera triggers
 
         Args:
             position (int): The target position to move the motor to.
+            read (int): Number of response lines to read
         """
 
-        while self.position != position:
-            response = await self.command(f"ZMV {position}")
-            if response.strip() == "ZMV":
-                await asyncio.sleep(1)
-                await self.get_position()
-            else:
-                self._status = False
+        # Estimated time to move to position in seconds
+        est_time = abs(position - self.position) / self.spum / 1000 / self.velocity
+        async with asyncio.timeout((est_time + 1) * 10):
+            while self.position != position:
+                response = await self.command(f"ZMV {position}", read=read)
+                if response.strip() in ["ZMV", "@LOG Trigger Camera"]:
+                    await asyncio.sleep(est_time + 0.5)
+                    await self.get_position()
+                else:
+                    self._status = False
+
+    @validate_and_retry(pattern=r"ZDACR\s+(\d+)")
+    async def _query_position(self):
+        return await self.command("ZDACR")
 
     async def get_position(self):
         """Retrieve the current actual position of the motor.
@@ -130,13 +140,19 @@ class ZStage(BaseStage):
         Returns:
             int: The current position of the motor.
         """
-        position = await self.command("ZDACR")
-        try:
-            self._position = int(position.split(" ")[1])
-            self._status = True
-        except TypeError:
-            LOGGER.warning("{self.name} :: Could not parse objective position")
-            self._status = False
+
+        attempts = 0
+        while attempts < 3:
+            try:
+                position = await self._query_position()
+                self._position = int(position.split(" ")[1])
+                self._status = True
+                return self._position
+            except ValueError:
+                LOGGER.debug(f"{self.name} :: Still moving")
+                self._status = False
+                await asyncio.sleep(1)
+                attempts += 1
 
         return self._position
 
@@ -144,7 +160,7 @@ class ZStage(BaseStage):
         """Set velocity in mm/s"""
 
         # Convert from mm/s to step/s
-        vel = velocity * 1288471
+        vel = int(velocity * 1288471)
 
         response = await self.command(f"ZSTEP {vel}")
         if response.strip() == "ZSTEP":
@@ -167,3 +183,8 @@ class ZStage(BaseStage):
     def max_velocity(self):
         """Maximum velocity of the objective."""
         return self.config["velocity"]["max_val"]
+
+    async def set_trigger(self, step: int):
+        """Set the step at which the camera will be triggered."""
+        await self.command(f"ZTRG {step}")
+        await self.command("ZYT 0 3")

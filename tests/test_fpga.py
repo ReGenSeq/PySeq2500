@@ -60,7 +60,7 @@ async def tiltstage(request, fpga):
         # Emulated coms for 3 motors
         coms = {}
         for i in range(1, 4):
-            coms[i] = EmulatedTiltMotor(name=f"TiltMotor{i}", address="TiltStageCOM")
+            coms[i] = EmulatedTiltMotor(name="FPGA", address="FPGACOM", id=i)
             await coms[i].connect()
 
         # Assign emulated coms to fake stage motors
@@ -186,8 +186,7 @@ class TestFilterWheel:
 
     @pytest.mark.diagnostic
     async def test_move(self, filterwheel: FilterWheel):
-        filter = "open"
-        await filterwheel.set_filter(filter)
+        await filterwheel.set_filter("open")
         assert filterwheel.filter == "open"
 
     async def test_shutdown(self, filterwheel: FilterWheel):

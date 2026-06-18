@@ -25,6 +25,7 @@ filter.green = "open"
 
 [focus]
 routine = "partial once" 
+tolerance = 10 # um
 [focus.optics]
 power.red = 25
 power.green = 25

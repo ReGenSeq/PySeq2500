@@ -1,18 +1,64 @@
 from pyseq_core.base_com import BaseCOM
 
-# from serial import Serial
+import logging
+import re
+import asyncio
 from aioserial import AioSerial
 from attrs import define, field
-from functools import cached_property
-import logging
-from pyseq2500.utils import HW_CONFIG
+from functools import cached_property, wraps
 from serial.tools.list_ports import comports
 from serial.serialutil import SerialException
-
 from pyseq_core.utils import map_coms
-import asyncio
+from pyseq2500.utils import HW_CONFIG
+
 
 LOGGER = logging.getLogger("PySeq")
+try:
+    LOOP = asyncio.get_running_loop()
+except RuntimeError:
+    LOOP = None
+
+
+def validate_and_retry(pattern, max_attempts=4, cleanup_at=3, clear_lines=1):
+    """
+    Async decorator that retries a query until the response matches a regex.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            if "{id}" in pattern:
+                # For tilt motors
+                formatted_pattern = pattern.format(id=getattr(self, "id", 1))
+            else:
+                formatted_pattern = pattern
+
+            regex = re.compile(formatted_pattern)
+
+            for attempt in range(1, max_attempts + 1):
+                response = await func(self, *args, **kwargs)
+
+                # Check for match (handling None or non-string types safely)
+                if response is not None and regex.search(str(response)):
+                    return response
+
+                # Trigger the single flush if we've hit the designated attempt
+                if attempt == cleanup_at and hasattr(self, "com"):
+                    await self.com.clear(clear_lines)
+
+                # If this was our last shot, raise the alarm
+                if attempt >= max_attempts:
+                    raise RuntimeError(
+                        f"{self.name}:: {func.__name__} failed pattern "
+                        f"match '{pattern}' after {max_attempts} attempts. "
+                        f"Last received: '{response}'"
+                    )
+
+                await asyncio.sleep(0.1)
+
+        return wrapper
+
+    return decorator
 
 
 @define(kw_only=True)
@@ -39,14 +85,13 @@ class SerialCOM(BaseCOM):
 
             if self.rx_address is None:
                 self.rx_address = self.config.get("rx_address", None)
-                print(self.name, self.rx_address)
 
             async with self.lock:
                 try:
                     # self.tx = Serial(port=self.address, baudrate=baudrate, timeout=timeout)
                     address = self.address
                     self.tx = AioSerial(
-                        port=self.address, baudrate=baudrate, timeout=timeout
+                        port=self.address, baudrate=baudrate, timeout=timeout, loop=LOOP
                     )
                     self._connected = True
 
@@ -63,7 +108,7 @@ class SerialCOM(BaseCOM):
                     if port is not None:
                         try:
                             self.rx = AioSerial(
-                                port=port, baudrate=baudrate, timeout=timeout
+                                port=port, baudrate=baudrate, timeout=timeout, loop=LOOP
                             )
                             self.rx_address = port
                             address += f" and {port}"
@@ -88,23 +133,32 @@ class SerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self) -> str:
+    async def read(self, timeout: float = 10) -> str:
         cmdid = f"{self._cmdid:04d}"
         response = ""
         try:
-            async with asyncio.timeout(10):
+            async with asyncio.timeout(timeout):
                 while len(response) == 0:
                     response = await self.rx.readline_async(size=-1)
-                    response = response.decode(errors="ignore")
+                    response = response.decode(errors="ignore").strip()
                     if len(response) == 0:
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.5)
                 LOGGER.debug(f"{self.name} :: rx {cmdid} :: {response}")
                 return response
         except asyncio.TimeoutError:
             LOGGER.warning(f"{self.name} :: rx {cmdid} :: response timed out")
             return response
 
-    async def command(self, command: str, read=True, delay=0.1) -> str:
+    async def clear(self, lines: int = 1):
+        LOGGER.warning(f"{self.name} :: clearing responses")
+        for i in range(lines):
+            response = await self.rx.readline_async(size=-1)
+            LOGGER.debug(f"{self.name} :: rx :: {response}")
+        while len(response) > 0:
+            response = await self.rx.readline_async(size=-1)
+            LOGGER.debug(f"{self.name} :: rx :: {response}")
+
+    async def command(self, command: str, read=True, delay=0.1, timeout=10) -> str:
         async with self.lock:
             await self.write(command)
 
@@ -114,7 +168,7 @@ class SerialCOM(BaseCOM):
                 if isinstance(read, bool):
                     read = 1
                 for _ in range(read):
-                    response = await self.read()
+                    response = await self.read(timeout=timeout)
                 return response  # pyright: ignore[reportPossiblyUnboundVariable]
             else:
                 return ""
@@ -168,7 +222,7 @@ class EmulatedSerialCOM(BaseCOM):
         LOGGER.debug(f"{self.name} :: tx {cmdid} :: {command}")
         return cmdid
 
-    async def read(self):
+    async def read(self, timeout=None):
         pass
 
     def response(self, response) -> str:

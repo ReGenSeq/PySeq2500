@@ -109,26 +109,29 @@ class FilterWheel(BaseFilter):
         await self.command(f"EX{self.id}HM")
         self._filter = "home"
 
-    async def set_filter(self, filter):
+    async def set_filter(self, filter_name):
         """Set LED color/mode and optionally sweep/pulse rate.
 
         Args:
             filter (str): Filter to turn the wheel to
         """
 
-        position = self._filters.get(filter, None)
-
-        if filter != self.filter and position is not None:
+        position = self._filters.get(filter_name, None)
+        if filter_name != self.filter and position is not None:
             if self.filter != "home":
                 await self.home()
-                await asyncio.sleep(2)
-            if filter != "home":
+                if filter_name != "home":
+                    await asyncio.sleep(2)
+
+            if filter_name != "home":
                 await self.command(f"EX{self.id}MV {position}")
-                self._filter = filter
-        else:
+
+            self._filter = filter_name
+
+        elif position is None:
             LOGGER.warning(f"{self.name} :: {filter} is not available")
 
-    async def get_filter(self, filter):
+    async def get_filter(self):
         """Not implemented for filter wheel."""
         return self.filter
 

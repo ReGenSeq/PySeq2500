@@ -4,6 +4,7 @@
 # Software settings should go in default.toml
 name: Test                                                                      # name of sequencer
 Test:                                                                           # settings for a specific sequencer
+  model: HiSeq2500
   flowcells: ['A', 'B']                                                         # list of flow cell names 
   FlowCellA:
     inlet_port: 
@@ -17,6 +18,7 @@ Test:                                                                           
     resolution: 0.375                                                           # um/px
   Cameras:
     sensor_width: 2048                                                          # width of TDI line sensor in pixels
+    sensor_height: 64                                                           # height of TDI line sensor in pixels
     exposure: &camera_exposure                                                  # &camera_exposure anchor for future reference
       min_val: 0.00002
       max_val: 1.004
@@ -34,10 +36,12 @@ Test:                                                                           
       nucleotides: "AG"
       left_emission: 687                                                          # A
       right_emission: 558                                                         # G
+      name: Camera_687_558
     1:                                                                          # Camera ID 1 properties                   
       nucleotides: "TC"  
       left_emission: 610                                                          # T
       right_emission: 740                                                         # C
+      name: Camera_610_740
   PumpA: &pump                                                                  # &pump anchor for future reference
     com: &pumpcom
       baudrate: 9600
@@ -113,8 +117,8 @@ Test:                                                                           
       prefix: "1"
       suffix: "\r\n"   
     spum: 100                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
-    origin: -180000                                                            # reference step for flow cells, used in `custom_roi_factory`
-    step: *y_step                                                                   # line bundle height for TDI imaging
+    origin: -180000                                                             # reference step for flow cells, used in `custom_roi_factory`
+    step: *y_step                                                               # line bundle height for TDI imaging
     position:
       min_val: -7000000
       max_val: 7000000
@@ -136,7 +140,7 @@ Test:                                                                           
       suffix: "\n"  
   TiltStage: &tiltstage
     com:
-      <<: *fpgacom
+      address: FPGA
     spum: 0.656                                                                 # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     position: &tiltposition                                                     # &tiltposition anchor for future reference
       min_val: 0
@@ -147,18 +151,20 @@ Test:                                                                           
   TiltMotor2: *tiltstage
   TiltMotor3: *tiltstage                                                             
   ZStage:
-    com:
-      <<: *fpgacom                                                              # shares communication address with `TiltStage`
+    com:                                                       # shares communication address with `TiltStage`
+      address: FPGA    
     spum: 262                                                                   # Steps Per Micron to convert from stage steps to real world distance, used in `custom_roi_factory`
     step: 235                                                                   # steps between z planes used in microscope z-stack routiness based on Nyquist sampling
     position:
-      min_val: 0
-      max_val: 65535
+      min_val: 1000
+      max_val: 65000
       units: steps
     velocity: 
       min_val: 0.1
       max_val: 5
-      units: "mms/s"
+      units: "mm/s"
+    focus_start: 2000
+    focus_stop: 62000
   RedLaser: 
     com:
       baudrate: 9600
@@ -190,20 +196,20 @@ Test:                                                                           
   TemperatureControllerB: *fc_temp                                              # reference settings using anchor from `TemperatureControllerB`
   Shutter:
     com:
-      <<: *fpgacom
+      address: FPGA
   EmissionFilter:
     com:
-      <<: *fpgacom
+      address: FPGA
     filter: &emission_filter
       valid_list: {'in':'I', 'out':'O'}
   RedFilterWheel: 
     com:
-      <<: *fpgacom
+      address: FPGA
     filter: &red_filter_wheel                                                   # &red_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.0':36, '2.4':71, '0.2':-107, 'open':143, '1.0':107, '0.6':-36, '0.5':-71}
   GreenFilterWheel: 
     com:
-      <<: *fpgacom
+      address: FPGA
     filter: &green_filter_wheel                                                 # &green_filter_wheel anchor for future reference
       valid_list: {'home':0, '4.5':-36, '3.8':-71, '3.5':-107, 'open':143, '1.0':107, '2.0':71, '4.0':36}          
 # Extra validation parameters for stage beyond X, Y, Z 
@@ -226,3 +232,63 @@ Test:                                                                           
       green: *green_filter_wheel                                                # reference settings using anchor from filter of `greenFilterWheel`
       red: *red_filter_wheel                                                    # reference settings using anchor from filter of `redFilterWheel`
       emission: *emission_filter
+  image:
+      background:
+        558: 126
+        610: 106
+        687: 100
+        740: 116
+      dark group:
+        558:
+          - 119
+          - 125
+          - 118
+          - 119
+          - 109
+          - 117
+          - 108
+          - 123
+        610:
+          - 89
+          - 101
+          - 95
+          - 94
+          - 103
+          - 105
+          - 100
+          - 96
+        687:
+          - 88
+          - 93
+          - 92
+          - 91
+          - 90
+          - 84
+          - 95
+          - 102
+        740:
+          - 111
+          - 105
+          - 109
+          - 95
+          - 121
+          - 119
+          - 101
+          - 95
+      max_pixel_value: 4095
+      std:
+        558: 1
+        610: 1
+        687: 1
+        740: 1
+      registration:
+        558:
+          - -2.09
+          - 0.85
+        687:
+          - 89.33
+          - -0.47
+        740:
+          - 89.39
+          - -0.2
+      updated: -1

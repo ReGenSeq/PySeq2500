@@ -55,6 +55,8 @@ class FlowCell(BaseFlowCell):
         """Configure the system."""
 
         # Update pump limits
-        await self.Pump.configure()
+        await self.Pump.configure(
+            exp_config.get(self.name, {}).get("barrels_per_lane", None)
+        )
         # Set 2 or 8 port inlet
         await self._select_inlet(exp_config["flowcell"]["inlet"])

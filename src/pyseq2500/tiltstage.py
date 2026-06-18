@@ -1,6 +1,6 @@
 import logging
 from pyseq_core.base_instruments import BaseStage
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, validate_and_retry
 from attrs import define, field
 import re
 import asyncio
@@ -21,15 +21,12 @@ TiCR           -> Clear the motor count registers (use after TiHM)
 
 @define(kw_only=True)
 class EmulatedTiltMotor(EmulatedSerialCOM):
+    id: int = field()
     _position: str = field(default="DISABLED")
     move_pattern: re.Pattern = field(default=re.compile(r"T(\d)MOVETO (\d+)"))
     rd_pattern: re.Pattern = field(default=re.compile(r"T(\d)RD"))
     hm_pattern: re.Pattern = field(default=re.compile(r"T(\d)HM"))
     cr_pattern: re.Pattern = field(default=re.compile(r"T(\d)CR"))
-
-    @cached_property
-    def id(self):
-        return self.name[-1]
 
     async def command(self, command: str, read: bool = True, delay: int = 0) -> str:
         """
@@ -158,17 +155,19 @@ class TiltMotor(BaseStage):
             await asyncio.sleep(2)
             await self.in_position()
 
+    @validate_and_retry(pattern=r".*T{id}RD\s+(-?\d+)")
+    async def _query_position(self):
+        return await self.command(f"T{self.id}RD")
+
     async def get_position(self):
         """Retrieve the current actual position of the motor.
 
         Returns:
             int: The current position of the motor.
         """
-        position = await self.command(f"T{self.id}RD")
-        while len(position.strip()) == 0:
-            position = await self.com.read()
-            await asyncio.sleep(0.1)
-        self._position = int(position[5:])
+
+        response = await self._query_position()
+        self._position = int(response[5:])
 
         return self._position
 

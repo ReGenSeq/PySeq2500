@@ -1,6 +1,6 @@
 from pyseq_core.base_instruments import BaseLaser
 import logging
-from pyseq2500.com import EmulatedSerialCOM
+from pyseq2500.com import EmulatedSerialCOM, validate_and_retry
 from attrs import define, field
 import re
 
@@ -24,7 +24,7 @@ class EmulatedLaser(EmulatedSerialCOM):
     off_pattern: re.Pattern = field(default=re.compile(r"OFF"))
     power_pattern: re.Pattern = field(default=re.compile(r"POWER=?(\d*)?"))
 
-    async def command(self, command: str, read: bool = True) -> str:
+    async def command(self, command: str, read: bool = True, **kwargs) -> str:
         """
         Asynchronously emulate sending commands and receiving response from laser.
 
@@ -110,8 +110,8 @@ class Laser(BaseLaser):
     async def initialize(self):
         """Turn laser on and set to low power."""
         await self.command("VERSION?")  # Get firmware version
-        if self.color == "green":
-            await self.com.read()  # Need to read extra line for green laser
+        # if self.color == "green":
+        #     await self.com.read(timeout=2)  # Need to read extra line for green laser
         await self.status()  # Get initial status
         await self.get_power()  # Get initial power
 
@@ -121,7 +121,7 @@ class Laser(BaseLaser):
 
     async def shutdown(self):
         """Turn laser off."""
-        await self.command("OFF")  # turn off the laser
+        await self.command("OFF", read=False)  # turn off the laser
 
     async def status(self) -> bool:
         """Query laser for status and power.
@@ -146,12 +146,16 @@ class Laser(BaseLaser):
         """
 
         if not self._status:
-            await self.command("ON")  # turn on the laser
+            await self.command("ON", read=False)  # turn on the laser
             await self.status()  # update status
 
         if self.power != power:
-            await self.command(f"POWER={power}")
+            await self.command(f"POWER={power}", read=False)
         await self.get_power()
+
+    @validate_and_retry(pattern=r"\d+mW")
+    async def _query_power(self):
+        return await self.command("POWER?")
 
     async def get_power(self):
         """Gets the current power of the laser.
@@ -159,8 +163,10 @@ class Laser(BaseLaser):
         Returns:
             int: The current power level of the laser.
         """
-        response = await self.command("POWER?")
+
+        response = await self._query_power()
         self._power = int(response.split("mW")[0])
+
         if self._status and self.power < 0:
             LOGGER.warning(f"{self.color} Laser is at 0 mW power.")
 
