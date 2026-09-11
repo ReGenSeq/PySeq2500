@@ -3,16 +3,31 @@ from attrs import field
 from pyseq_core.base_system import BaseSequencer
 from pyseq_core.base_protocol import CUSTOM_ROI
 from pyseq2500.flowcell import FlowCell
+from pyseq2500.temperature import ChillerTemperatureController
+from pyseq2500.com import COM_DICT
 from pyseq2500.utils import HW_CONFIG, DEFAULT_CONFIG
 from math import ceil, floor
 
 
 class PySeq2500(BaseSequencer):
     _flowcells: dict[str, FlowCell] = field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
+    _chiller: ChillerTemperatureController = field(init=False)
+
+    @_chiller.default  # pyright: ignore[reportAttributeAccessIssue]
+    def _init_chiller(self):
+        return ChillerTemperatureController(
+            name="ChillerTemperatureController",
+            com=COM_DICT["ARM9"],
+        )
 
     @_flowcells.default  # pyright: ignore[reportAttributeAccessIssue]
     def set_flowcells(self):
         return {fc: FlowCell(name=fc) for fc in ["A", "B"]}
+
+    @property
+    def chiller(self) -> ChillerTemperatureController:
+        """The reagent chiller temperature controller."""
+        return self._chiller
 
     @staticmethod
     def custom_roi_stage(roi: Optional[CUSTOM_ROI] = None, **kwargs) -> dict:

@@ -1,5 +1,6 @@
 from pyseq_core.base_system import BaseFlowCell
 from pyseq2500.fluidics import Pump, Valve
+from pyseq2500.temperature import FlowCellTemperatureController
 from pyseq2500.com import COM_DICT
 from typing import Literal
 import logging
@@ -24,9 +25,17 @@ class FlowCell(BaseFlowCell):
             "Pump": Pump(name=f"Pump{fc}", com=COM_DICT[f"Pump{fc}"]),
             "Valve": Valve(name=f"Valve24{fc}", com=COM_DICT[f"Valve24{fc}"]),
             "InletValve": Valve(name=f"Valve10{fc}", com=COM_DICT[f"Valve10{fc}"]),
+            "TemperatureController": FlowCellTemperatureController(
+                name=f"FlowCellTemperatureController{fc}", com=COM_DICT["ARM9"]
+            ),
         }
 
         return instruments
+
+    @property
+    def TemperatureController(self) -> FlowCellTemperatureController:
+        """The flowcell temperature controller, or None if not configured."""
+        return self.instruments["TemperatureController"]
 
     @property
     def InletValve(self) -> Valve:
