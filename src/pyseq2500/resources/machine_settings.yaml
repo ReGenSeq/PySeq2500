@@ -194,7 +194,7 @@ Test:                                                                           
       address: ARM9CHEMA                                                         # TODO: replace with real serial number
       prefix: ""
       suffix: "\r"
-    min_val: 0.1
+    min_val: 4
     max_val: 20
     units: C
     tolerance: 0.5                                                              # °C — may need tuning after hardware testing
@@ -202,7 +202,7 @@ Test:                                                                           
     com:
       address: ChillerTemperatureController
     fc_channel: 0
-    min_val: 20
+    min_val: 12
     max_val: 60
     units: C
     tolerance: 0.5                                                              # °C — acceptable deviation from setpoint
