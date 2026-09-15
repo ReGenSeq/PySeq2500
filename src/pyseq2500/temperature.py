@@ -138,7 +138,7 @@ class EmulatedARM9(EmulatedSerialCOM):
         return "A1"
 
     def _fc_query(self, ch: int) -> str:
-        return f"{self._fc_temp[ch]:.2f}A1"
+        return f"{self._fc_temp[ch]:.2f}C:A1"
 
     def _fc_tec(self, ch: int, on: int) -> str:
         self._fc_on[ch] = bool(on)
@@ -151,7 +151,7 @@ class EmulatedARM9(EmulatedSerialCOM):
 
     def _re_query(self) -> str:
         t = self._chiller_temp
-        return f"{t[0]:.2f}:{t[1]:.2f}:{t[2]:.2f}A1"
+        return f"{t[0]:.2f}C:{t[1]:.2f}C:{t[2]:.2f}:A1"
 
 
 @define(kw_only=True)
@@ -251,7 +251,7 @@ class FlowCellTemperatureController(BaseTemperatureController):
             float: Current flowcell temperature in °C, or NaN on parse failure.
         """
         response = await self.command(f"?FCTEMP:{self.fc_channel}")
-        m = re.search(r"([\d.]+)A1", response)
+        m = re.search(r"([\d.]+)C:A1", response)
         if m:
             self._temperature = float(m.group(1))
         else:
@@ -356,7 +356,7 @@ class ChillerTemperatureController(BaseTemperatureController):
             float: Mean of the three TEC temperatures in °C, or NaN on parse failure.
         """
         response = await self.command("?RETEMP:3")
-        m = re.search(r"([\d.]+):([\d.]+):([\d.]+)A1", response)
+        m = re.search(r"([\d.]+)C?:([\d.]+)C?:([\d.]+)C?:A1", response)
         if m:
             self._chiller_temperatures = [float(m.group(i)) for i in range(1, 4)]
             self._temperature = sum(self._chiller_temperatures) / 3
