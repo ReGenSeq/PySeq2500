@@ -62,7 +62,7 @@ class EmulatedARM9(EmulatedSerialCOM):
     each other.
     """
 
-    name: str = field(default="ARM9")
+    name: str = field(default="ChillerTemperatureController")
 
     # Flowcell state: index 0 = channel A, index 1 = channel B
     _fc_setpoint: list[float] = field(factory=lambda: [25.0, 25.0])
@@ -112,7 +112,7 @@ class EmulatedARM9(EmulatedSerialCOM):
 
     def _dispatch(self, command: str) -> str:
         if m := re.search(self.idn_pattern, command):  # noqa: F841
-            return "ARM9 Emulated v1.0 A1"
+            return "ARM9 Emulated v1.0:A1"
         if m := re.search(self.init_pattern, command):  # noqa: F841
             return "A1"
         if m := re.search(self.fc_query_pattern, command):
@@ -196,7 +196,7 @@ class FlowCellTemperatureController(BaseTemperatureController):
 
     async def _set_pid(self) -> None:
         for param, val in FC_PID:
-            await self.command(f"FCTEMP:{self.fc_channel}:{param}:{val}", read=False)
+            await self.command(f"FCTEMP:{self.fc_channel}:{param}:{val}")
 
     async def configure(self, exp_config: dict = {}) -> None:
         pass
@@ -212,11 +212,11 @@ class FlowCellTemperatureController(BaseTemperatureController):
 
     async def fc_on(self) -> None:
         """Enable the flowcell TEC."""
-        await self.command(f"FCTEC:{self.fc_channel}:1", read=False)
+        await self.command(f"FCTEC:{self.fc_channel}:1")
 
     async def fc_off(self) -> None:
         """Disable the flowcell TEC."""
-        await self.command(f"FCTEC:{self.fc_channel}:0", read=False)
+        await self.command(f"FCTEC:{self.fc_channel}:0")
 
     async def set_temperature(
         self, temperature: float, timeout: float | None = 0.0
@@ -238,7 +238,7 @@ class FlowCellTemperatureController(BaseTemperatureController):
                 f"{self.name}: temperature {temperature} °C out of range "
                 f"[{self.min_temperature}, {self.max_temperature}]"
             )
-        await self.command(f"FCTEMP:{self.fc_channel}:{temperature}", read=False)
+        await self.command(f"FCTEMP:{self.fc_channel}:{temperature}")
         if timeout is None or timeout > 0:
             await asyncio.wait_for(self.wait_for_temperature(temperature), timeout)
 
@@ -296,16 +296,16 @@ class ChillerTemperatureController(BaseTemperatureController):
         Sends INIT and ?IDN on behalf of the whole board. Must be called
         before FlowCellTemperatureController.initialize() on either channel.
         """
-        await self.command("INIT", read=False)
+        await self.command("INIT")
         await self.command("?IDN")
         await self._set_pid()
 
     async def _set_pid(self) -> None:
         for ch in range(2):  # TEC blocks 0 and 1
             for param, val in TEC_PID:
-                await self.command(f"RETEC:{ch}:{param}:{val}", read=False)
+                await self.command(f"RETEC:{ch}:{param}:{val}")
         for param, val in TEC2_PID:  # TEC block 2 has no S or F params
-            await self.command(f"RETEC:2:{param}:{val}", read=False)
+            await self.command(f"RETEC:2:{param}:{val}")
 
     async def configure(self, exp_config: dict = {}) -> None:
         pass
@@ -343,7 +343,7 @@ class ChillerTemperatureController(BaseTemperatureController):
             )
         channels = range(3) if channel is None else [channel]
         for ch in channels:
-            await self.command(f"RETEMP:{ch}:{temperature}", read=False)
+            await self.command(f"RETEMP:{ch}:{temperature}")
         if timeout is None or timeout > 0:
             await asyncio.wait_for(self.wait_for_temperature(temperature), timeout)
 

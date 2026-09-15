@@ -28,9 +28,9 @@ async def arm9_com(request):
     In hardware mode: the real SerialCOM from COM_DICT["ARM9"].
     """
     if request.param == "MockARM9":
-        com = EmulatedARM9(name="ARM9", address="ARM9COM")
+        com = EmulatedARM9(address="ARM9COM")
     else:
-        com = COM_DICT["ARM9"]
+        com = COM_DICT["ChillerTemperatureController"]
     await com.connect()
     yield com
     await com.close()

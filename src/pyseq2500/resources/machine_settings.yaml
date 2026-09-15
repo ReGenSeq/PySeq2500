@@ -187,16 +187,20 @@ Test:                                                                           
       min_val: 0
       max_val: 400 
       units: mW
-  ARM9:                                                                         # ARM9 CHEM board — owns the SerialCOM instance shared by all temperature controllers
-    com: &arm9com
-      baudrate: 9600
+  ChillerTemperatureController:
+    com:
+      baudrate: 115200
       timeout: 1
-      address: ARM9XXXX                                                         # TODO: replace with real serial number
+      address: ARM9CHEMA                                                         # TODO: replace with real serial number
       prefix: ""
       suffix: "\r"
+    min_val: 0.1
+    max_val: 20
+    units: C
+    tolerance: 0.5                                                              # °C — may need tuning after hardware testing
   FlowCellTemperatureControllerA: &fc_temp                                      # &fc_temp anchor for FlowCellTemperatureControllerB
     com:
-      address: ARM9
+      address: ChillerTemperatureController
     fc_channel: 0
     min_val: 20
     max_val: 60
@@ -205,12 +209,7 @@ Test:                                                                           
   FlowCellTemperatureControllerB:
     <<: *fc_temp
     fc_channel: 1
-  ChillerTemperatureController:
-    com: *arm9com
-    min_val: 0.1
-    max_val: 20
-    units: C
-    tolerance: 0.5                                                              # °C — may need tuning after hardware testing
+
   Shutter:
     com:
       address: FPGA
