@@ -198,6 +198,7 @@ Test:                                                                           
     max_val: 20
     units: C
     tolerance: 0.5                                                              # °C — may need tuning after hardware testing
+    interval: 600                                                               # time in seconds between temperature checks    
   FlowCellTemperatureControllerA: &fc_temp                                      # &fc_temp anchor for FlowCellTemperatureControllerB
     com:
       address: ChillerTemperatureController
@@ -206,6 +207,7 @@ Test:                                                                           
     max_val: 60
     units: C
     tolerance: 0.5                                                              # °C — acceptable deviation from setpoint
+    interval: 300                                                               # time in seconds between temperature checks
   FlowCellTemperatureControllerB:
     <<: *fc_temp
     fc_channel: 1

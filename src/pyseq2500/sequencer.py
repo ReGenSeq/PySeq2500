@@ -10,24 +10,33 @@ from math import ceil, floor
 
 
 class PySeq2500(BaseSequencer):
-    _flowcells: dict[str, FlowCell] = field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
-    _chiller: ChillerTemperatureController = field(init=False)
+    _flowcells: dict[str, FlowCell] = field(init=False)
+    instruments: dict = field(init=False)  # pyright: ignore[reportIncompatibleVariableOverride]
 
-    @_chiller.default  # pyright: ignore[reportAttributeAccessIssue]
-    def _init_chiller(self):
-        return ChillerTemperatureController(
-            name="ChillerTemperatureController",
-            com=COM_DICT["ARM9"],
-        )
+    @instruments.default  # pyright ignore[reportAttributeAccessIssue]
+    def set_instruments(self):
+        instruments = {
+            "Chiller": ChillerTemperatureController(
+                name="ChillerTemperatureController",
+                com=COM_DICT["ARM9"],
+            )
+        }
+        return instruments
+
+    @property
+    def Chiller(self) -> ChillerTemperatureController:
+        """The reagent chiller temperature controller."""
+        return self.instruments["Chiller"]
 
     @_flowcells.default  # pyright: ignore[reportAttributeAccessIssue]
     def set_flowcells(self):
         return {fc: FlowCell(name=fc) for fc in ["A", "B"]}
 
-    @property
-    def chiller(self) -> ChillerTemperatureController:
-        """The reagent chiller temperature controller."""
-        return self._chiller
+    def __extra_post_init__(self):
+        super().__extra_post_init__()
+        self.register_monitor_channel(
+            "Chiller_temperature", self.Chiller.get_temperature, self.Chiller.interval
+        )
 
     @staticmethod
     def custom_roi_stage(roi: Optional[CUSTOM_ROI] = None, **kwargs) -> dict:
